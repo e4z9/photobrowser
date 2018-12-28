@@ -1,3 +1,6 @@
+#include <../../util/fileutil.h>
+#include <../../util/metadatautil.h>
+
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -5,31 +8,8 @@
 #include <QFileInfo>
 #include <QTemporaryFile>
 
-#include <exiv2/exiv2.hpp>
-
-#include <optional.h>
 #include <utime.h>
 #include <sys/xattr.h>
-
-static std::optional<QDateTime> metaDataCreationDateTime(const QString &filePath)
-{
-    try {
-        auto image = Exiv2::ImageFactory::open(filePath.toStdString());
-        image->readMetadata();
-        const Exiv2::ExifData &exifData = image->exifData();
-        if (exifData.empty())
-            return {};
-        const Exiv2::ExifKey creationDateTimeKey("Exif.Photo.DateTimeOriginal");
-        Exiv2::ExifData::const_iterator md = exifData.findKey(creationDateTimeKey);
-        if (md != exifData.end() && md->typeId() == Exiv2::asciiString) {
-            const auto dateTime = QDateTime::fromString(QString::fromStdString(md->toString()),
-                                                        "yyyy:MM:dd hh:mm:ss");
-            return dateTime.isValid() ? std::make_optional(dateTime) : std::nullopt;
-        }
-    } catch (Exiv2::Error) {
-    }
-    return {};
-}
 
 static bool setTimes(const QString &filePath, const QDateTime &lastModified, const QDateTime &lastAccess)
 {
@@ -96,21 +76,10 @@ static bool safeReplace(const QString &source, const QString &target)
     return true;
 }
 
-static QString resolveSymlinks(const QString &filePath)
-{
-    QFileInfo fi(filePath);
-    int count = 0;
-    static const int maxCount = 10;
-    while (++count <= maxCount && fi.isSymLink())
-        fi.setFile(fi.dir(), fi.symLinkTarget());
-    if (count > maxCount)
-        return {};
-    return fi.filePath();
-}
-
 static std::optional<QDateTime> targetDate(const QString &canonicalFilePath, bool isSymlink)
 {
-    const auto dt = metaDataCreationDateTime(canonicalFilePath);
+    const auto meta = Util::metaData(canonicalFilePath);
+    const auto dt = meta ? meta->created : std::nullopt;
     if (!dt) {
         if (isSymlink)
             return QFileInfo(canonicalFilePath).lastModified();
@@ -122,7 +91,7 @@ static std::optional<QDateTime> targetDate(const QString &canonicalFilePath, boo
 static bool resetCreationDateToMetaData(const QString &filePath)
 {
     const QFileInfo fi(filePath);
-    const QString canonicalFilePath = resolveSymlinks(filePath);
+    const QString canonicalFilePath = Util::resolveSymlinks(filePath);
     const auto dt = targetDate(canonicalFilePath, fi.isSymLink());
     if (!dt)
         return false;
