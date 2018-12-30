@@ -4,6 +4,7 @@
 
 #include <QAbstractItemModel>
 #include <QDateTime>
+#include <QFuture>
 #include <QSize>
 
 #include <optional.h>
@@ -19,8 +20,12 @@ public:
     std::optional<Util::MetaData> metaData;
 };
 
+using MediaItems = std::vector<MediaItem>;
+
 class MediaDirectoryModel : public QAbstractItemModel
 {
+    Q_OBJECT
+
 public:
     enum class Role {
         Item = Qt::UserRole
@@ -30,6 +35,10 @@ public:
 
     void setPath(const QString &path);
 
+signals:
+    void loadingStarted();
+    void loadingFinished();
+
 public:
     QModelIndex index(int row, int column, const QModelIndex &parent) const override;
     QModelIndex parent(const QModelIndex &child) const override;
@@ -38,7 +47,8 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
 
 private:
-    std::vector<MediaItem> m_items;
+    MediaItems m_items;
+    QFuture<MediaItems> m_future;
 };
 
 Q_DECLARE_METATYPE(MediaItem)

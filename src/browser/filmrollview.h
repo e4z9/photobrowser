@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class ImageView;
+class MediaDirectoryModel;
 
 class MediaItemDelegate : public QAbstractItemDelegate
 {

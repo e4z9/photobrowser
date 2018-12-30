@@ -3,6 +3,8 @@
 #include "imageview.h"
 #include "mediadirectorymodel.h"
 
+#include <qtc/progressindicator.h>
+
 #include <QAbstractItemDelegate>
 #include <QEvent>
 #include <QListView>
@@ -33,7 +35,30 @@ public:
         return QListView::event(ev);
     }
 
+    void setModel(QAbstractItemModel *m) override
+    {
+        if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model())) {
+            disconnect(mediaModel, &MediaDirectoryModel::loadingStarted, this, nullptr);
+            disconnect(mediaModel, &MediaDirectoryModel::loadingFinished, this, nullptr);
+        }
+        QListView::setModel(m);
+        if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model())) {
+            connect(mediaModel, &MediaDirectoryModel::loadingStarted, this, [this] {
+                if (!m_progressIndicator) {
+                    m_progressIndicator = new Utils::ProgressIndicator(
+                        Utils::ProgressIndicatorSize::Medium);
+                    m_progressIndicator->attachToWidget(this);
+                }
+                m_progressIndicator->show();
+            });
+            connect(mediaModel, &MediaDirectoryModel::loadingFinished, this, [this] {
+                m_progressIndicator->hide();
+            });
+        }
+    }
+
     MediaItemDelegate m_delegate;
+    Utils::ProgressIndicator *m_progressIndicator = nullptr;
 };
 
 static const int MARGIN = 10;

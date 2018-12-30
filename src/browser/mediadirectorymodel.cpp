@@ -3,6 +3,8 @@
 #include "../util/fileutil.h"
 #include "../util/metadatautil.h"
 
+#include <qtc/runextensions.h>
+
 #include <QDir>
 #include <QImageReader>
 
@@ -26,28 +28,43 @@ MediaDirectoryModel::MediaDirectoryModel() = default;
 
 void MediaDirectoryModel::setPath(const QString &path)
 {
+    m_future.cancel();
     beginResetModel();
     m_items.clear();
-    // TODO async
-    const QDir dir(path);
-    const auto entryList = dir.entryInfoList(QDir::Files);
-    m_items.reserve(entryList.size());
-    for (const auto &entry : entryList) {
-        const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
-        if (!QImageReader::imageFormat(resolvedFilePath).isEmpty()) {
-            QFileInfo fi(resolvedFilePath);
-            const auto metaData = Util::metaData(resolvedFilePath);
-            m_items.push_back({entry.fileName(),
-                               entry.filePath(),
-                               resolvedFilePath,
-                               fi.birthTime(),
-                               fi.lastModified(),
-                               metaData});
-        }
-    }
-    m_items.shrink_to_fit();
-    std::sort(m_items.begin(), m_items.end(), itemLessThan);
     endResetModel();
+    emit loadingStarted();
+    m_future = Utils::runAsync([path](QFutureInterface<MediaItems> &fi) {
+        const QDir dir(path);
+        const auto entryList = dir.entryInfoList(QDir::Files);
+        MediaItems items;
+        items.reserve(entryList.size());
+        for (const auto &entry : entryList) {
+            if (fi.isCanceled())
+                break;
+            const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
+            if (!QImageReader::imageFormat(resolvedFilePath).isEmpty()) {
+                QFileInfo fi(resolvedFilePath);
+                const auto metaData = Util::metaData(resolvedFilePath);
+                items.push_back({entry.fileName(),
+                                 entry.filePath(),
+                                 resolvedFilePath,
+                                 fi.birthTime(),
+                                 fi.lastModified(),
+                                 metaData});
+            }
+        }
+        items.shrink_to_fit();
+        std::sort(items.begin(), items.end(), itemLessThan);
+        if (!fi.isCanceled())
+            fi.reportResult(items);
+    });
+    Utils::onResultReady(m_future, this, [this](const MediaItems &items) {
+        beginResetModel();
+        m_items = items;
+        endResetModel();
+        emit loadingFinished();
+        m_future = QFuture<MediaItems>();
+    });
 }
 
 QModelIndex MediaDirectoryModel::index(int row, int column, const QModelIndex &parent) const
