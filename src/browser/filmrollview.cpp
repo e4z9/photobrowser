@@ -139,7 +139,10 @@ void MediaItemDelegate::paint(QPainter *painter,
                               const QModelIndex &index) const
 {
     if (option.state & QStyle::State_Selected) {
-        painter->fillRect(option.rect, option.palette.brush(QPalette::Window));
+        const QPalette::ColorGroup group = (option.state & QStyle::State_HasFocus)
+                                               ? QPalette::Active
+                                               : QPalette::Inactive;
+        painter->fillRect(option.rect, option.palette.brush(group, QPalette::Highlight));
     }
     const auto value = index.data(int(MediaDirectoryModel::Role::Item));
     if (!value.canConvert<MediaItem>())
