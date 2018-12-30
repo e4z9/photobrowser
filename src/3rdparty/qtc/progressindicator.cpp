@@ -25,10 +25,6 @@
 
 #include "progressindicator.h"
 
-#include "icon.h"
-#include "qtcassert.h"
-#include "stylehelper.h"
-
 #include <QEvent>
 #include <QPainter>
 #include <QPixmap>
@@ -75,7 +71,7 @@
 
 namespace {
 
-static QString imageFileNameForIndicatorSize(Utils::ProgressIndicatorSize size)
+QString imageFileNameForIndicatorSize(Utils::ProgressIndicatorSize size)
 {
     switch (size) {
     case Utils::ProgressIndicatorSize::Large:
@@ -109,6 +105,21 @@ ProgressIndicatorPainter::ProgressIndicatorPainter(ProgressIndicatorSize size)
     setIndicatorSize(size);
 }
 
+static QPixmap maskToColorAndAlpha(const QPixmap &mask, const QColor &color)
+{
+    QImage result(mask.toImage().convertToFormat(QImage::Format_ARGB32));
+    result.setDevicePixelRatio(mask.devicePixelRatio());
+    auto bitsStart = reinterpret_cast<QRgb*>(result.bits());
+    const QRgb *bitsEnd = bitsStart + result.width() * result.height();
+    const QRgb tint = color.rgb() & 0x00ffffff;
+    const auto alpha = QRgb(color.alpha());
+    for (QRgb *pixel = bitsStart; pixel < bitsEnd; ++pixel) {
+        QRgb pixelAlpha = (((~*pixel) & 0xff) * alpha) >> 8;
+        *pixel = (pixelAlpha << 24) | tint;
+    }
+    return QPixmap::fromImage(result);
+}
+
 /*!
     Changes the size of the progress indicator to \a size. Users of the class need
     to adapt their painting or layouting code to the change in resulting pixel size.
@@ -121,8 +132,7 @@ void ProgressIndicatorPainter::setIndicatorSize(ProgressIndicatorSize size)
     m_size = size;
     m_rotationStep = size == ProgressIndicatorSize::Small ? 45 : 30;
     m_timer.setInterval(size == ProgressIndicatorSize::Small ? 100 : 80);
-    m_pixmap = Icon({{imageFileNameForIndicatorSize(size),
-                      Theme::PanelTextColorMid}}, Icon::Tint).pixmap();
+    m_pixmap = maskToColorAndAlpha(imageFileNameForIndicatorSize(size), Qt::black);
 }
 
 /*!
@@ -187,7 +197,8 @@ void ProgressIndicatorPainter::paint(QPainter &painter, const QRect &rect) const
 */
 void ProgressIndicatorPainter::startAnimation()
 {
-    QTC_ASSERT(m_callback, return);
+    if (!m_callback)
+        return;
     m_timer.start();
 }
 
@@ -303,7 +314,8 @@ bool ProgressIndicator::eventFilter(QObject *obj, QEvent *ev)
 */
 void ProgressIndicator::resizeToParent()
 {
-    QTC_ASSERT(parentWidget(), return);
+    if (!parentWidget())
+        return;
     setGeometry(QRect(QPoint(0, 0), parentWidget()->size()));
 }
 

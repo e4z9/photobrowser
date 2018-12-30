@@ -27,7 +27,6 @@
 
 #include "functiontraits.h"
 #include "optional.h"
-#include "utils_global.h"
 
 #include <QCoreApplication>
 #include <QFuture>
@@ -38,6 +37,8 @@
 #include <QThreadPool>
 
 #include <functional>
+
+using namespace std;
 
 // hasCallOperator & Co must be outside of any namespace
 // because of internal compiler error with MSVC2015 Update 2

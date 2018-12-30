@@ -6,10 +6,23 @@ project(photobrowser VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt5Core)
 find_package(Qt5Gui)
 find_package(Qt5Widgets)
+
+set(UTIL_SOURCES
+    "../util/fileutil.cpp"
+    "../util/metadatautil.cpp"
+)
+
+set(QTC_UTILS_SOURCES
+    "../3rdparty/qtc/progressindicator.cpp"
+    "../3rdparty/qtc/runextensions.cpp"
+    "../3rdparty/qtc/utils.qrc"
+)
+add_compile_definitions(QTCREATOR_UTILS_EXPORT=)
 
 add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
    "main.cpp"
@@ -18,8 +31,8 @@ add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
    "mediadirectorymodel.cpp"
    "filmrollview.cpp"
    "imageview.cpp"
-   "../util/fileutil.cpp"
-   "../util/metadatautil.cpp"
+   ${UTIL_SOURCES}
+   ${QTC_UTILS_SOURCES}
 )
 include_directories("../3rdparty/")
 

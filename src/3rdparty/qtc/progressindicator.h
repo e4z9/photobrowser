@@ -25,8 +25,6 @@
 
 #pragma once
 
-#include "utils_global.h"
-
 #include <QTimer>
 #include <QWidget>
 

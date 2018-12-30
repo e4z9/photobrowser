@@ -9,10 +9,14 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 find_package(Qt5Core)
 find_package(Qt5Gui)
 
-add_executable(${PROJECT_NAME}
-    "main.cpp"
+set(UTIL_SOURCES
     "../../util/fileutil.cpp"
     "../../util/metadatautil.cpp"
+)
+
+add_executable(${PROJECT_NAME}
+    "main.cpp"
+    ${UTIL_SOURCES}
 )
 include_directories("../../3rdparty/")
 
