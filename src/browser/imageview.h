@@ -2,7 +2,11 @@
 
 #include "mediadirectorymodel.h"
 
+#include <QFuture>
 #include <QGraphicsView>
+#include <QImage>
+
+#include <memory>
 
 class ImageView : public QGraphicsView
 {
@@ -15,4 +19,5 @@ public:
 
 private:
     QGraphicsItem *m_item = nullptr;
+    QFuture<QImage> m_loadingFuture;
 };

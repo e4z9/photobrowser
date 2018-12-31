@@ -2,6 +2,7 @@
 
 #include <QAbstractItemModel>
 #include <QListView>
+#include <QTimer>
 #include <QWidget>
 
 class ImageView;
@@ -32,6 +33,9 @@ public:
     QAbstractItemModel *model() const;
 
 private:
+    void select(const QModelIndex &index);
+
     QListView *m_fotoroll;
     ImageView *m_imageView;
+    QTimer m_selectionUpdate;
 };

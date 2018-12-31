@@ -1,15 +1,13 @@
 #include "imageview.h"
 
+#include <qtc/runextensions.h>
+
 #include <QGraphicsPixmapItem>
 
-static QGraphicsItem *itemForFilePath(const QString &filePath, Util::Orientation orientation)
+static QImage imageForFilePath(const QString &filePath, Util::Orientation orientation)
 {
-    // TODO SVG and videos
-    QPixmap pixmap(filePath);
-    auto item = new QGraphicsPixmapItem(
-                pixmap.transformed(Util::matrixForOrientation(pixmap.size(), orientation)));
-    item->setTransformationMode(Qt::SmoothTransformation);
-    return item;
+    QImage image(filePath);
+    return image.transformed(Util::matrixForOrientation(image.size(), orientation));
 }
 
 ImageView::ImageView()
@@ -31,13 +29,22 @@ void ImageView::clear()
 
 void ImageView::setItem(const MediaItem &item)
 {
-    clear();
-    // TODO async loading
-    m_item = itemForFilePath(item.resolvedFilePath,
-                             item.metaData ? item.metaData->orientation : Util::Orientation::Normal);
-    scene()->addItem(m_item);
-    scene()->setSceneRect(m_item->boundingRect());
-    scaleToFit();
+    // TODO SVG and videos
+    m_loadingFuture.cancel();
+    m_loadingFuture = Utils::runAsync(imageForFilePath,
+                                      item.resolvedFilePath,
+                                      item.metaData ? item.metaData->orientation
+                                                    : Util::Orientation::Normal);
+    Utils::onResultReady(m_loadingFuture, this, [this](const QImage &image) {
+        clear();
+        auto item = new QGraphicsPixmapItem(QPixmap::fromImage(image));
+        item->setTransformationMode(Qt::SmoothTransformation);
+        m_item = item;
+        scene()->addItem(m_item);
+        scene()->setSceneRect(m_item->boundingRect());
+        scaleToFit();
+        m_loadingFuture = QFuture<QImage>();
+    });
 }
 
 void ImageView::scaleToFit()

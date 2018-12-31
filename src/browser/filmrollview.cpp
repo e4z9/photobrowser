@@ -20,6 +20,16 @@ public:
     {
         setFlow(QListView::LeftToRight);
         setItemDelegate(&m_delegate);
+        m_progressTimer.setInterval(50);
+        m_progressTimer.setSingleShot(true);
+        connect(&m_progressTimer, &QTimer::timeout, this, [this] {
+            if (!m_progressIndicator) {
+                m_progressIndicator = new Utils::ProgressIndicator(
+                    Utils::ProgressIndicatorSize::Medium);
+                m_progressIndicator->attachToWidget(this);
+            }
+            m_progressIndicator->show();
+        });
     }
 
     bool event(QEvent *ev) override
@@ -43,22 +53,24 @@ public:
         }
         QListView::setModel(m);
         if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model())) {
-            connect(mediaModel, &MediaDirectoryModel::loadingStarted, this, [this] {
-                if (!m_progressIndicator) {
-                    m_progressIndicator = new Utils::ProgressIndicator(
-                        Utils::ProgressIndicatorSize::Medium);
-                    m_progressIndicator->attachToWidget(this);
-                }
-                m_progressIndicator->show();
-            });
+            connect(mediaModel,
+                    &MediaDirectoryModel::loadingStarted,
+                    &m_progressTimer,
+                    qOverload<>(&QTimer::start));
             connect(mediaModel, &MediaDirectoryModel::loadingFinished, this, [this] {
-                m_progressIndicator->hide();
+                m_progressTimer.stop();
+                if (m_progressIndicator)
+                    m_progressIndicator->hide();
+                if (model()->rowCount() > 0)
+                    selectionModel()->setCurrentIndex(model()->index(0, 0),
+                                                      QItemSelectionModel::SelectCurrent);
             });
         }
     }
 
     MediaItemDelegate m_delegate;
     Utils::ProgressIndicator *m_progressIndicator = nullptr;
+    QTimer m_progressTimer;
 };
 
 static const int MARGIN = 10;
@@ -80,32 +92,49 @@ FilmRollView::FilmRollView(QWidget *parent)
     splitter->setStretchFactor(1, 0);
 
     layout()->addWidget(splitter);
+
+    m_selectionUpdate.setInterval(80);
+    m_selectionUpdate.setSingleShot(true);
+    connect(&m_selectionUpdate, &QTimer::timeout, this, [this] {
+        select(m_fotoroll->selectionModel()->currentIndex());
+    });
 }
 
 void FilmRollView::setModel(QAbstractItemModel *model)
 {
+    if (m_fotoroll->model())
+        disconnect(m_fotoroll->model(), nullptr, this, nullptr);
     if (m_fotoroll->selectionModel())
         disconnect(m_fotoroll->selectionModel(), nullptr, this, nullptr);
     m_fotoroll->setModel(model);
-    connect(m_fotoroll->selectionModel(),
-            &QItemSelectionModel::currentRowChanged,
-            this,
-            [this](const QModelIndex &current) {
-                if (!current.isValid())
-                    m_imageView->clear();
-                const auto value = m_fotoroll->model()->data(current,
-                                                             int(MediaDirectoryModel::Role::Item));
-                if (value.canConvert<MediaItem>()) {
-                    m_imageView->setItem(value.value<MediaItem>());
-                } else {
-                    m_imageView->clear();
-                }
-            });
+    if (m_fotoroll->selectionModel()) {
+        connect(m_fotoroll->selectionModel(),
+                &QItemSelectionModel::currentChanged,
+                &m_selectionUpdate,
+                qOverload<>(&QTimer::start));
+    }
+    if (m_fotoroll->model()) {
+        connect(m_fotoroll->model(), &QAbstractItemModel::modelAboutToBeReset, [this] {
+            m_imageView->clear();
+        });
+    }
 }
 
 QAbstractItemModel *FilmRollView::model() const
 {
     return m_fotoroll->model();
+}
+
+void FilmRollView::select(const QModelIndex &index)
+{
+    if (!index.isValid())
+        m_imageView->clear();
+    const auto value = m_fotoroll->model()->data(index, int(MediaDirectoryModel::Role::Item));
+    if (value.canConvert<MediaItem>()) {
+        m_imageView->setItem(value.value<MediaItem>());
+    } else {
+        m_imageView->clear();
+    }
 }
 
 static QSize thumbnailSize(const int viewHeight, const QSize dimensions)
