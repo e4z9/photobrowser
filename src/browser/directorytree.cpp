@@ -81,6 +81,11 @@ void DirectoryTree::setRootPath(const QString &path)
         const QString path = dir.absolutePath();
         m_dirSelector->addItem(path, path);
     } while (dir.cdUp());
+#ifdef Q_OS_MACOS
+    const QString volumes = "/Volumes";
+    if (QFileInfo(volumes).isDir())
+        m_dirSelector->addItem(volumes, volumes);
+#endif
     if (!m_dirTree->currentIndex().isValid())
         m_dirTree->setCurrentIndex(rootIndex);
 }
