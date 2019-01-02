@@ -177,17 +177,26 @@ void MediaItemDelegate::paint(QPainter *painter,
     if (!value.canConvert<MediaItem>())
         return;
     const auto item = value.value<MediaItem>();
-    const auto size = thumbnailSize(availableHeight(option),
-                                    item.metaData ? item.metaData->dimensions : defaultSize());
-    const QRect thumbRect(option.rect.x() + MARGIN - 1,
-                          option.rect.y() + MARGIN - 1,
-                          size.width(),
-                          size.height());
-    if (item.metaData && item.metaData->thumbnail) {
-        painter->drawPixmap(thumbRect, *(item.metaData->thumbnail));
+    const int height = availableHeight(option);
+    const auto thumbRect = [option](const QSize &size) {
+        return QRect(option.rect.x() + MARGIN - 1,
+                     option.rect.y() + MARGIN - 1,
+                     size.width(),
+                     size.height());
+    };
+    const auto thumbnail = index.data(int(MediaDirectoryModel::Role::Thumbnail)).value<QPixmap>();
+    if (!thumbnail.isNull()) {
+        const auto size = thumbnailSize(height, thumbnail.size());
+        painter->drawPixmap(thumbRect(size), thumbnail);
     } else {
-        painter->setPen(Qt::black);
-        painter->drawRect(thumbRect);
+        const auto size = thumbnailSize(height,
+                                        item.metaData ? item.metaData->dimensions : defaultSize());
+        if (item.metaData && item.metaData->thumbnail) {
+            painter->drawPixmap(thumbRect(size), *(item.metaData->thumbnail));
+        } else {
+            painter->setPen(Qt::black);
+            painter->drawRect(thumbRect(size));
+        }
     }
 }
 

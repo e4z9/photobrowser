@@ -17,6 +17,7 @@ ImageView::ImageView()
     setDragMode(ScrollHandDrag);
     setRenderHint(QPainter::SmoothPixmapTransform);
     setRenderHint(QPainter::Antialiasing);
+    setFocusPolicy(Qt::NoFocus);
 }
 
 void ImageView::clear()

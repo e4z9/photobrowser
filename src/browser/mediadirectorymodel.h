@@ -8,6 +8,7 @@
 #include <QSize>
 
 #include <optional.h>
+#include <queue>
 
 class MediaItem
 {
@@ -17,10 +18,32 @@ public:
     QString resolvedFilePath;
     QDateTime created;
     QDateTime lastModified;
+    std::optional<QPixmap> thumbnail;
     std::optional<Util::MetaData> metaData;
 };
 
 using MediaItems = std::vector<MediaItem>;
+Q_DECLARE_METATYPE(MediaItem)
+
+class ThumbnailGoverner : public QObject
+{
+    Q_OBJECT
+public:
+    void requestThumbnail(const MediaItem &item, bool cancelRunning = false);
+    void cancel(const QString &resolvedFilePath);
+
+    using RunningItem = std::pair<QString, QFuture<QImage>>;
+signals:
+    void thumbnailReady(const QString &resolvedFilePath, const QPixmap &pixmap);
+
+private:
+    void start(const QString &resolvedFilePath, Util::Orientation orientation);
+    void startPendingItem();
+    void logQueueSizes() const;
+
+    std::queue<std::pair<QString, Util::Orientation>> m_pending;
+    std::vector<RunningItem> m_running;
+};
 
 class MediaDirectoryModel : public QAbstractItemModel
 {
@@ -28,7 +51,8 @@ class MediaDirectoryModel : public QAbstractItemModel
 
 public:
     enum class Role {
-        Item = Qt::UserRole
+        Item = Qt::UserRole,
+        Thumbnail
     };
 
     MediaDirectoryModel();
@@ -49,6 +73,5 @@ public:
 private:
     MediaItems m_items;
     QFuture<MediaItems> m_future;
+    mutable ThumbnailGoverner m_thumbnailGoverner;
 };
-
-Q_DECLARE_METATYPE(MediaItem)
