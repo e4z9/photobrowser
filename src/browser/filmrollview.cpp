@@ -3,8 +3,6 @@
 #include "imageview.h"
 #include "mediadirectorymodel.h"
 
-#include <qtc/progressindicator.h>
-
 #include <QAbstractItemDelegate>
 #include <QEvent>
 #include <QListView>
@@ -20,16 +18,6 @@ public:
     {
         setFlow(QListView::LeftToRight);
         setItemDelegate(&m_delegate);
-        m_progressTimer.setInterval(50);
-        m_progressTimer.setSingleShot(true);
-        connect(&m_progressTimer, &QTimer::timeout, this, [this] {
-            if (!m_progressIndicator) {
-                m_progressIndicator = new Utils::ProgressIndicator(
-                    Utils::ProgressIndicatorSize::Medium);
-                m_progressIndicator->attachToWidget(this);
-            }
-            m_progressIndicator->show();
-        });
     }
 
     bool event(QEvent *ev) override
@@ -47,30 +35,20 @@ public:
 
     void setModel(QAbstractItemModel *m) override
     {
-        if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model())) {
-            disconnect(mediaModel, &MediaDirectoryModel::loadingStarted, this, nullptr);
-            disconnect(mediaModel, &MediaDirectoryModel::loadingFinished, this, nullptr);
-        }
+        if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model()))
+            disconnect(mediaModel, &MediaDirectoryModel::modelReset, this, nullptr);
         QListView::setModel(m);
         if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model())) {
-            connect(mediaModel,
-                    &MediaDirectoryModel::loadingStarted,
-                    &m_progressTimer,
-                    qOverload<>(&QTimer::start));
-            connect(mediaModel, &MediaDirectoryModel::loadingFinished, this, [this] {
-                m_progressTimer.stop();
-                if (m_progressIndicator)
-                    m_progressIndicator->hide();
-                if (model()->rowCount() > 0)
+            connect(mediaModel, &MediaDirectoryModel::modelReset, this, [this] {
+                if (model()->rowCount() > 0) {
                     selectionModel()->setCurrentIndex(model()->index(0, 0),
                                                       QItemSelectionModel::SelectCurrent);
+                }
             });
         }
     }
 
     MediaItemDelegate m_delegate;
-    Utils::ProgressIndicator *m_progressIndicator = nullptr;
-    QTimer m_progressTimer;
 };
 
 static const int MARGIN = 10;

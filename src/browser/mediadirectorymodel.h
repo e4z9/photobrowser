@@ -4,8 +4,9 @@
 
 #include <QAbstractItemModel>
 #include <QDateTime>
-#include <QFuture>
+#include <QFutureWatcher>
 #include <QSize>
+#include <QTimer>
 
 #include <optional.h>
 #include <queue>
@@ -57,7 +58,7 @@ public:
 
     MediaDirectoryModel();
 
-    void setPath(const QString &path);
+    void setPath(const QString &path, bool recursive);
 
 signals:
     void loadingStarted();
@@ -70,8 +71,11 @@ public:
     int columnCount(const QModelIndex &parent) const override;
     QVariant data(const QModelIndex &index, int role) const override;
 
+    using ResultList = std::vector<std::pair<int, MediaItems>>;
 private:
+    void insertItems(int index, const MediaItems &items);
+
     MediaItems m_items;
-    QFuture<MediaItems> m_future;
+    QFutureWatcher<ResultList> m_futureWatcher;
     mutable ThumbnailGoverner m_thumbnailGoverner;
 };

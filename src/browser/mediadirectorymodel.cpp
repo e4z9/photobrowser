@@ -6,16 +6,16 @@
 #include <qtc/runextensions.h>
 
 #include <QDir>
+#include <QDirIterator>
 #include <QImageReader>
-
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(logGov, "browser.thumbnails", QtWarningMsg)
 
 static void createThumbnailImage(QFutureInterface<QImage> &fi,
-                                   const QString &filePath,
-                                   const Util::Orientation orientation,
-                                   const int maxSize)
+                                 const QString &filePath,
+                                 const Util::Orientation orientation,
+                                 const int maxSize)
 {
     // TODO SVG and videos
     QImage image(filePath);
@@ -45,7 +45,11 @@ static const QDateTime &createdDateTime(const MediaItem &item)
 
 static bool itemLessThan(const MediaItem &a, const MediaItem &b)
 {
-    return createdDateTime(a) < createdDateTime(b);
+    const QDateTime &da = createdDateTime(a);
+    const QDateTime &db = createdDateTime(b);
+    if (da == db)
+        return a.resolvedFilePath < b.resolvedFilePath;
+    return da < db;
 }
 
 const int MAX_THREADS = 4;
@@ -99,10 +103,7 @@ void ThumbnailGoverner::cancel(const QString &resolvedFilePath)
 
 void ThumbnailGoverner::start(const QString &resolvedFilePath, Util::Orientation orientation)
 {
-    auto future = Utils::runAsync(createThumbnailImage,
-                                  resolvedFilePath,
-                                  orientation,
-                                  200);
+    auto future = Utils::runAsync(createThumbnailImage, resolvedFilePath, orientation, 200);
     m_running.emplace_back<RunningItem>({resolvedFilePath, future});
     qDebug(logGov) << "started  " << resolvedFilePath;
     logQueueSizes();
@@ -132,6 +133,29 @@ void ThumbnailGoverner::startPendingItem()
     start(pending.first, pending.second);
 }
 
+static MediaDirectoryModel::ResultList addSorted(MediaItems &target, const MediaItems &source)
+{
+    MediaDirectoryModel::ResultList resultList;
+    target.reserve(target.size() + source.size());
+    auto current = source.begin();
+    const auto end = source.end();
+    auto insertionPoint = target.begin();
+    while (current != end) {
+        while (insertionPoint != target.end() && itemLessThan(*insertionPoint, *current))
+            ++insertionPoint;
+        auto currentEnd = insertionPoint != target.end() ? current + 1 : source.end();
+        while (currentEnd != source.end() && itemLessThan(*currentEnd, *insertionPoint))
+            ++currentEnd;
+        const auto insertionIndex = std::distance(target.begin(), insertionPoint);
+        const auto insertionCount = std::distance(current, currentEnd);
+        insertionPoint = target.insert(insertionPoint, current, currentEnd);
+        resultList.push_back({insertionIndex, MediaItems(current, currentEnd)});
+        insertionPoint += insertionCount;
+        current = currentEnd;
+    }
+    return resultList;
+}
+
 MediaDirectoryModel::MediaDirectoryModel()
 {
     connect(&m_thumbnailGoverner,
@@ -147,48 +171,72 @@ MediaDirectoryModel::MediaDirectoryModel()
                     }
                 }
             });
+    connect(&m_futureWatcher, &QFutureWatcherBase::resultReadyAt, this, [this](int index) {
+        for (const auto &value : m_futureWatcher.resultAt(index))
+            insertItems(value.first, value.second);
+    });
+    connect(&m_futureWatcher,
+            &QFutureWatcherBase::finished,
+            this,
+            &MediaDirectoryModel::loadingFinished);
 }
 
-void MediaDirectoryModel::setPath(const QString &path)
+static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList> &fi,
+                               const QString &path)
 {
-    m_future.cancel();
+    const QDir dir(path);
+    const auto entryList = dir.entryInfoList(QDir::Files);
+    MediaItems items;
+    items.reserve(entryList.size());
+    for (const auto &entry : entryList) {
+        if (fi.isCanceled())
+            return {};
+        const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
+        if (!QImageReader::imageFormat(resolvedFilePath).isEmpty()) {
+            QFileInfo fi(resolvedFilePath);
+            const auto metaData = Util::metaData(resolvedFilePath);
+            items.push_back({entry.fileName(),
+                             entry.filePath(),
+                             resolvedFilePath,
+                             fi.birthTime(),
+                             fi.lastModified(),
+                             std::nullopt,
+                             metaData});
+        }
+    }
+    return std::move(items);
+}
+
+void MediaDirectoryModel::setPath(const QString &path, bool recursive)
+{
+    m_futureWatcher.cancel();
     beginResetModel();
     m_items.clear();
     endResetModel();
     emit loadingStarted();
-    m_future = Utils::runAsync([path](QFutureInterface<MediaItems> &fi) {
-        const QDir dir(path);
-        const auto entryList = dir.entryInfoList(QDir::Files);
-        MediaItems items;
-        items.reserve(entryList.size());
-        for (const auto &entry : entryList) {
-            if (fi.isCanceled())
-                break;
-            const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
-            if (!QImageReader::imageFormat(resolvedFilePath).isEmpty()) {
-                QFileInfo fi(resolvedFilePath);
-                const auto metaData = Util::metaData(resolvedFilePath);
-                items.push_back({entry.fileName(),
-                                 entry.filePath(),
-                                 resolvedFilePath,
-                                 fi.birthTime(),
-                                 fi.lastModified(),
-                                 std::nullopt,
-                                 metaData});
+    m_futureWatcher.setFuture(Utils::runAsync([path, recursive](QFutureInterface<ResultList> &fi) {
+        MediaItems results = collectItems(fi, path);
+        if (fi.isCanceled())
+            return;
+        std::sort(results.begin(), results.end(), itemLessThan);
+        if (!results.empty())
+            fi.reportResult({{0, results}});
+        if (recursive) {
+            QDirIterator it(path,
+                            QDir::Dirs | QDir::NoDotAndDotDot,
+                            QDirIterator::Subdirectories | QDirIterator::FollowSymlinks);
+            while (it.hasNext()) {
+                if (fi.isCanceled())
+                    break;
+                const QString dir = it.next();
+                MediaItems dirResults = collectItems(fi, dir);
+                std::sort(dirResults.begin(), dirResults.end(), itemLessThan);
+                const ResultList resultList = addSorted(results, dirResults);
+                if (!fi.isCanceled() && !resultList.empty())
+                    fi.reportResult(resultList);
             }
         }
-        items.shrink_to_fit();
-        std::sort(items.begin(), items.end(), itemLessThan);
-        if (!fi.isCanceled())
-            fi.reportResult(items);
-    });
-    Utils::onResultReady(m_future, this, [this](const MediaItems &items) {
-        beginResetModel();
-        m_items = items;
-        endResetModel();
-        emit loadingFinished();
-        m_future = QFuture<MediaItems>();
-    });
+    }));
 }
 
 QModelIndex MediaDirectoryModel::index(int row, int column, const QModelIndex &parent) const
@@ -231,4 +279,19 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
         return {};
     }
     return {};
+}
+
+void MediaDirectoryModel::insertItems(int index, const MediaItems &items)
+{
+    if (items.empty() || index > m_items.size())
+        return;
+    if (m_items.empty()) {
+        beginResetModel();
+        m_items = items;
+        endResetModel();
+    } else {
+        beginInsertRows(QModelIndex(), index, index + items.size() - 1);
+        m_items.insert(std::begin(m_items) + index, std::begin(items), std::end(items));
+        endInsertRows();
+    }
 }
