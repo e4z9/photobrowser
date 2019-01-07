@@ -5,8 +5,10 @@
 
 #include <qtc/progressindicator.h>
 
+#include <QAction>
 #include <QCheckBox>
 #include <QEvent>
+#include <QMenuBar>
 #include <QSplitter>
 #include <QVBoxLayout>
 
@@ -62,6 +64,36 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     connect(&m_model, &MediaDirectoryModel::loadingFinished, this, [this] {
         m_progressTimer.stop();
         m_progressIndicator->hide();
+    });
+
+    auto menubar = new QMenuBar(this);
+    setMenuBar(menubar);
+
+    // video actions
+    auto videoMenu = menubar->addMenu(tr("Video"));
+
+    auto playStop = videoMenu->addAction(tr("Play/Pause"));
+    playStop->setShortcut({"Space"});
+    connect(playStop, &QAction::triggered, imageView, &FilmRollView::togglePlayVideo);
+
+    auto stepForward = videoMenu->addAction(tr("Step Forward"));
+    stepForward->setShortcut({"."});
+    connect(stepForward, &QAction::triggered, imageView, [imageView] {
+        imageView->stepVideo(10000);
+    });
+
+    auto stepBackward = videoMenu->addAction(tr("Step Backward"));
+    stepBackward->setShortcut({","});
+    connect(stepBackward, &QAction::triggered, imageView, [imageView] {
+        imageView->stepVideo(-10000);
+    });
+
+    connect(imageView, &FilmRollView::currentItemChanged, this, [imageView, playStop, stepForward, stepBackward] {
+        const auto currentItem = imageView->currentItem();
+        const bool enabled = (currentItem && currentItem->type == MediaType::Video);
+        playStop->setEnabled(enabled);
+        stepForward->setEnabled(enabled);
+        stepBackward->setEnabled(enabled);
     });
 }
 

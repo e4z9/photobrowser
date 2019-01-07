@@ -5,6 +5,7 @@
 #include <QFuture>
 #include <QGraphicsView>
 #include <QImage>
+#include <QMediaPlayer>
 
 #include <memory>
 
@@ -15,9 +16,16 @@ public:
 
     void clear();
     void setItem(const MediaItem &item);
-    void scaleToFit();
+
+    void togglePlayVideo();
+    void stepVideo(qint64 step);
 
 private:
+    void scaleToFit();
+    void setItem(QGraphicsItem *item);
+
     QGraphicsItem *m_item = nullptr;
     QFuture<QImage> m_loadingFuture;
+    QMediaPlayer m_player;
+    bool m_preloading = false;
 };

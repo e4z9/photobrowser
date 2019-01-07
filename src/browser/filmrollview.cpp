@@ -1,7 +1,6 @@
 #include "filmrollview.h"
 
 #include "imageview.h"
-#include "mediadirectorymodel.h"
 
 #include <QAbstractItemDelegate>
 #include <QEvent>
@@ -51,7 +50,7 @@ public:
     MediaItemDelegate m_delegate;
 };
 
-static const int MARGIN = 10;
+static constexpr int MARGIN = 10;
 
 FilmRollView::FilmRollView(QWidget *parent)
     : QWidget(parent)
@@ -86,13 +85,13 @@ void FilmRollView::setModel(QAbstractItemModel *model)
         disconnect(m_fotoroll->selectionModel(), nullptr, this, nullptr);
     m_fotoroll->setModel(model);
     if (m_fotoroll->selectionModel()) {
-        connect(m_fotoroll->selectionModel(),
-                &QItemSelectionModel::currentChanged,
-                &m_selectionUpdate,
-                qOverload<>(&QTimer::start));
+        connect(m_fotoroll->selectionModel(), &QItemSelectionModel::currentChanged, this, [this] {
+            m_selectionUpdate.start();
+            emit currentItemChanged();
+        });
     }
     if (m_fotoroll->model()) {
-        connect(m_fotoroll->model(), &QAbstractItemModel::modelAboutToBeReset, [this] {
+        connect(m_fotoroll->model(), &QAbstractItemModel::modelAboutToBeReset, this, [this] {
             m_imageView->clear();
         });
     }
@@ -101,6 +100,27 @@ void FilmRollView::setModel(QAbstractItemModel *model)
 QAbstractItemModel *FilmRollView::model() const
 {
     return m_fotoroll->model();
+}
+
+void FilmRollView::togglePlayVideo()
+{
+    m_imageView->togglePlayVideo();
+}
+
+void FilmRollView::stepVideo(qint64 step)
+{
+    m_imageView->stepVideo(step);
+}
+
+std::optional<MediaItem> FilmRollView::currentItem() const
+{
+    const auto index = m_fotoroll->currentIndex();
+    if (index.isValid()) {
+        const auto value = m_fotoroll->model()->data(index, int(MediaDirectoryModel::Role::Item));
+        if (value.canConvert<MediaItem>())
+            return value.value<MediaItem>();
+    }
+    return {};
 }
 
 void FilmRollView::select(const QModelIndex &index)
@@ -163,19 +183,52 @@ void MediaItemDelegate::paint(QPainter *painter,
                      size.height());
     };
     const auto thumbnail = index.data(int(MediaDirectoryModel::Role::Thumbnail)).value<QPixmap>();
+    QRect tRect;
     if (!thumbnail.isNull()) {
         const auto size = thumbnailSize(height, thumbnail.size());
-        painter->drawPixmap(thumbRect(size), thumbnail);
+        tRect = thumbRect(size);
+        painter->drawPixmap(tRect, thumbnail);
     } else {
         const auto size = thumbnailSize(height,
                                         item.metaData ? item.metaData->dimensions : defaultSize());
+        tRect = thumbRect(size);
         if (item.metaData && item.metaData->thumbnail) {
-            painter->drawPixmap(thumbRect(size), *(item.metaData->thumbnail));
+            painter->drawPixmap(tRect, *(item.metaData->thumbnail));
         } else {
             painter->setPen(Qt::black);
-            painter->drawRect(thumbRect(size));
+            painter->drawRect(tRect);
         }
     }
+
+    if (item.duration && *item.duration > 0) {
+        QTime duration(0, 0);
+        duration = duration.addMSecs(*item.duration);
+        const QString format = duration.hour() > 0 ? "HH:mm:ss" : "mm:ss";
+        const QString durationStr = duration.toString(format);
+        QFont durationFont = option.font;
+        durationFont.setPixelSize(std::min(option.rect.height() / 10, 12));
+        QFontMetrics fm(durationFont);
+        const QSize durationSize = fm.size(Qt::TextSingleLine, durationStr) + QSize(1, 1);
+        const QPoint bottomRight = tRect.bottomRight();
+        const QRect durationRect(QPoint(bottomRight.x() - durationSize.width(),
+                                        bottomRight.y() - durationSize.height()),
+                                 bottomRight);
+        painter->fillRect(durationRect, option.palette.brush(QPalette::Base));
+        painter->save();
+        painter->setPen(Qt::black);
+        painter->setFont(durationFont);
+        painter->drawText(durationRect, Qt::AlignCenter, durationStr);
+        painter->restore();
+    }
+}
+
+static QSize itemSize(const MediaItem &item)
+{
+    if (item.thumbnail)
+        return item.thumbnail->size();
+    if (item.metaData)
+        return item.metaData->dimensions;
+    return defaultSize();
 }
 
 QSize MediaItemDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
@@ -187,9 +240,7 @@ QSize MediaItemDelegate::sizeHint(const QStyleOptionViewItem &option, const QMod
         return {};
     const auto item = value.value<MediaItem>();
     // TODO exiv2 might not be able to handle it, but Qt probably can (e.g. videos)
-    return thumbnailSize(availableHeight(option),
-                         item.metaData ? item.metaData->dimensions : defaultSize())
-           + QSize(2 * MARGIN, 2 * MARGIN);
+    return thumbnailSize(availableHeight(option), itemSize(item)) + QSize(2 * MARGIN, 2 * MARGIN);
 }
 
 bool MediaItemDelegate::helpEvent(QHelpEvent *event,

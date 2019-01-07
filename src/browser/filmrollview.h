@@ -1,9 +1,13 @@
 #pragma once
 
+#include "mediadirectorymodel.h"
+
 #include <QAbstractItemModel>
 #include <QListView>
 #include <QTimer>
 #include <QWidget>
+
+#include <optional.h>
 
 class ImageView;
 class MediaDirectoryModel;
@@ -31,6 +35,14 @@ public:
 
     void setModel(QAbstractItemModel *model);
     QAbstractItemModel *model() const;
+
+    void togglePlayVideo();
+    void stepVideo(qint64 step);
+
+    std::optional<MediaItem> currentItem() const;
+
+signals:
+    void currentItemChanged();
 
 private:
     void select(const QModelIndex &index);

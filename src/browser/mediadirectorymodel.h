@@ -3,13 +3,17 @@
 #include "../util/metadatautil.h"
 
 #include <QAbstractItemModel>
+#include <QAbstractVideoSurface>
 #include <QDateTime>
 #include <QFutureWatcher>
+#include <QMediaPlayer>
 #include <QSize>
 #include <QTimer>
 
 #include <optional.h>
-#include <queue>
+#include <deque>
+
+enum class MediaType { Image, Video };
 
 class MediaItem
 {
@@ -21,10 +25,46 @@ public:
     QDateTime lastModified;
     std::optional<QPixmap> thumbnail;
     std::optional<Util::MetaData> metaData;
+    std::optional<qint64> duration;
+    MediaType type;
 };
 
 using MediaItems = std::vector<MediaItem>;
 Q_DECLARE_METATYPE(MediaItem)
+
+class ThumbnailItem
+{
+public:
+    QImage image;
+    std::optional<qint64> duration;
+};
+
+class VideoSnapshotCreator : public QAbstractVideoSurface
+{
+    Q_OBJECT
+
+public:
+    static QFuture<ThumbnailItem> requestSnapshot(const QString &resolvedFilePath);
+
+    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
+        QAbstractVideoBuffer::HandleType type = QAbstractVideoBuffer::NoHandle) const override;
+    bool isFormatSupported(const QVideoSurfaceFormat &format) const override;
+    bool start(const QVideoSurfaceFormat &format) override;
+    bool present(const QVideoFrame &frame) override;
+
+private:
+    VideoSnapshotCreator(const QString &resolvedFilePath);
+    void cancel();
+
+    QFutureInterface<ThumbnailItem> m_fi;
+    QFutureWatcher<ThumbnailItem> m_watcher;
+    QMediaPlayer m_player;
+    QImage::Format m_imageFormat;
+    QSize m_imageSize;
+    QRect m_imageRect;
+    bool m_readyForSnapshot = false;
+    bool m_snapshotDone = false;
+};
 
 class ThumbnailGoverner : public QObject
 {
@@ -33,16 +73,21 @@ public:
     void requestThumbnail(const MediaItem &item, bool cancelRunning = false);
     void cancel(const QString &resolvedFilePath);
 
-    using RunningItem = std::pair<QString, QFuture<QImage>>;
+    using RunningItem = std::pair<QString, QFuture<ThumbnailItem>>;
+
 signals:
-    void thumbnailReady(const QString &resolvedFilePath, const QPixmap &pixmap);
+    void thumbnailReady(const QString &resolvedFilePath,
+                        const QPixmap &pixmap,
+                        std::optional<qint64> duration);
 
 private:
-    void start(const QString &resolvedFilePath, Util::Orientation orientation);
-    void startPendingItem();
+    void startItem(const QString &resolvedFilePath,
+                    const MediaType type,
+                    Util::Orientation orientation);
+    void startPending();
     void logQueueSizes() const;
 
-    std::queue<std::pair<QString, Util::Orientation>> m_pending;
+    std::deque<std::tuple<QString, MediaType, Util::Orientation>> m_pending;
     std::vector<RunningItem> m_running;
 };
 
@@ -51,10 +96,7 @@ class MediaDirectoryModel : public QAbstractItemModel
     Q_OBJECT
 
 public:
-    enum class Role {
-        Item = Qt::UserRole,
-        Thumbnail
-    };
+    enum class Role { Item = Qt::UserRole, Thumbnail };
 
     MediaDirectoryModel();
 
@@ -72,6 +114,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
 
     using ResultList = std::vector<std::pair<int, MediaItems>>;
+
 private:
     void insertItems(int index, const MediaItems &items);
 

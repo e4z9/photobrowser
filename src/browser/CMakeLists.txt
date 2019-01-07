@@ -11,6 +11,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt5Core)
 find_package(Qt5Gui)
 find_package(Qt5Widgets)
+find_package(Qt5Multimedia)
+find_package(Qt5MultimediaWidgets)
 
 set(UTIL_SOURCES
     "../util/fileutil.cpp"
@@ -39,6 +41,8 @@ include_directories("../3rdparty/")
 target_link_libraries(${PROJECT_NAME} Qt5::Core)
 target_link_libraries(${PROJECT_NAME} Qt5::Gui)
 target_link_libraries(${PROJECT_NAME} Qt5::Widgets)
+target_link_libraries(${PROJECT_NAME} Qt5::Multimedia)
+target_link_libraries(${PROJECT_NAME} Qt5::MultimediaWidgets)
 
 target_link_libraries(${PROJECT_NAME} ${Exiv2_Library})
 include_directories(${Exiv2_IncludePath})
