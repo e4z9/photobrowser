@@ -12,6 +12,18 @@
 
 Q_LOGGING_CATEGORY(logGov, "browser.thumbnails", QtWarningMsg)
 
+template <typename T, typename Function>
+const QFuture<T> &onFinished(const QFuture<T> &future, QObject *guard, Function f)
+{
+    auto watcher = new QFutureWatcher<T>();
+    QObject::connect(watcher, &QFutureWatcherBase::finished, guard, [f, watcher] {
+        f(watcher->future());
+    });
+    QObject::connect(watcher, &QFutureWatcherBase::finished, watcher, &QObject::deleteLater);
+    watcher->setFuture(future);
+    return future;
+}
+
 static void createThumbnailImage(QFutureInterface<QImage> &fi,
                                  const QString &filePath,
                                  const Util::Orientation orientation,
@@ -107,7 +119,7 @@ void ThumbnailGoverner::start(const QString &resolvedFilePath, Util::Orientation
     m_running.emplace_back<RunningItem>({resolvedFilePath, future});
     qDebug(logGov) << "started  " << resolvedFilePath;
     logQueueSizes();
-    Utils::onResultReady(future, this, [this, future, resolvedFilePath](const QImage &image) {
+    onFinished(future, this, [this, resolvedFilePath](const QFuture<QImage> &future) {
         auto runningItem = std::find_if(m_running.begin(),
                                         m_running.end(),
                                         [future](const RunningItem &item) {
@@ -119,7 +131,8 @@ void ThumbnailGoverner::start(const QString &resolvedFilePath, Util::Orientation
             qWarning(logGov) << "Thumbnail governer internal error: Could not find running future";
         qDebug(logGov) << "finished " << resolvedFilePath;
         logQueueSizes();
-        emit thumbnailReady(resolvedFilePath, QPixmap::fromImage(image));
+        if (!future.isCanceled() && future.resultCount() > 0)
+            emit thumbnailReady(resolvedFilePath, QPixmap::fromImage(future.result()));
         startPendingItem();
     });
 }
