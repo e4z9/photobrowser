@@ -9,19 +9,24 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 find_package(Qt5Core)
 find_package(Qt5Gui)
 
-set(UTIL_SOURCES
-    "../../util/fileutil.cpp"
-    "../../util/metadatautil.cpp"
-)
-
 add_executable(${PROJECT_NAME}
     "main.cpp"
-    ${UTIL_SOURCES}
 )
 include_directories("../../3rdparty/")
 
 target_link_libraries(${PROJECT_NAME} Qt5::Core)
 target_link_libraries(${PROJECT_NAME} Qt5::Gui)
+
+target_sources(${PROJECT_NAME} PRIVATE
+    "../../util/fileutil.cpp"
+    "../../util/metadatautil.cpp"
+)
+if(APPLE)
+    target_sources(${PROJECT_NAME} PRIVATE
+        "../../util/fileutil_mac.mm"
+    )
+    target_link_libraries(${PROJECT_NAME} "-framework Foundation" "-framework AppKit")
+endif(APPLE)
 
 target_link_libraries(${PROJECT_NAME} ${Exiv2_Library})
 include_directories(${Exiv2_IncludePath})

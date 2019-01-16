@@ -14,11 +14,6 @@ find_package(Qt5Widgets)
 find_package(Qt5Multimedia)
 find_package(Qt5MultimediaWidgets)
 
-set(UTIL_SOURCES
-    "../util/fileutil.cpp"
-    "../util/metadatautil.cpp"
-)
-
 set(QTC_UTILS_SOURCES
     "../3rdparty/qtc/progressindicator.cpp"
     "../3rdparty/qtc/runextensions.cpp"
@@ -33,7 +28,6 @@ add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
    "mediadirectorymodel.cpp"
    "filmrollview.cpp"
    "imageview.cpp"
-   ${UTIL_SOURCES}
    ${QTC_UTILS_SOURCES}
 )
 include_directories("../3rdparty/")
@@ -43,6 +37,17 @@ target_link_libraries(${PROJECT_NAME} Qt5::Gui)
 target_link_libraries(${PROJECT_NAME} Qt5::Widgets)
 target_link_libraries(${PROJECT_NAME} Qt5::Multimedia)
 target_link_libraries(${PROJECT_NAME} Qt5::MultimediaWidgets)
+
+target_sources(${PROJECT_NAME} PRIVATE
+    "../util/fileutil.cpp"
+    "../util/metadatautil.cpp"
+)
+if(APPLE)
+    target_sources(${PROJECT_NAME} PRIVATE
+        "../util/fileutil_mac.mm"
+    )
+    target_link_libraries(${PROJECT_NAME} "-framework Foundation" "-framework AppKit")
+endif(APPLE)
 
 target_link_libraries(${PROJECT_NAME} ${Exiv2_Library})
 include_directories(${Exiv2_IncludePath})

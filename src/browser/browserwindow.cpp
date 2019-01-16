@@ -69,6 +69,19 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto menubar = new QMenuBar(this);
     setMenuBar(menubar);
 
+    // file actions
+    auto fileMenu = menubar->addMenu(tr("File"));
+
+    auto moveToTrash = fileMenu->addAction(tr("Move to Trash"));
+    moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
+    connect(moveToTrash, &QAction::triggered, this, [this, imageView] {
+        m_model.moveItemAtIndexToTrash(imageView->currentIndex());
+    });
+
+    connect(imageView, &FilmRollView::currentItemChanged, this, [imageView, moveToTrash] {
+        moveToTrash->setEnabled(imageView->currentItem().has_value());
+    });
+
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
 

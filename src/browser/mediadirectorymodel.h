@@ -101,6 +101,7 @@ public:
     MediaDirectoryModel();
 
     void setPath(const QString &path, bool recursive);
+    void moveItemAtIndexToTrash(const QModelIndex &index);
 
 signals:
     void loadingStarted();

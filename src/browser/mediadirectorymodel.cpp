@@ -426,6 +426,17 @@ void MediaDirectoryModel::setPath(const QString &path, bool recursive)
     }));
 }
 
+void MediaDirectoryModel::moveItemAtIndexToTrash(const QModelIndex &index)
+{
+    if (!index.isValid() || index.row() >= m_items.size())
+        return;
+    beginRemoveRows(index.parent(), index.row(), index.row());
+    const MediaItem &item = m_items.at(index.row());
+    Util::moveToTrash({item.filePath});
+    m_items.erase(std::begin(m_items) + index.row());
+    endRemoveRows();
+}
+
 QModelIndex MediaDirectoryModel::index(int row, int column, const QModelIndex &parent) const
 {
     if (parent.isValid())

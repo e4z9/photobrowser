@@ -91,8 +91,11 @@ void FilmRollView::setModel(QAbstractItemModel *model)
         });
     }
     if (m_fotoroll->model()) {
-        connect(m_fotoroll->model(), &QAbstractItemModel::modelAboutToBeReset, this, [this] {
-            m_imageView->clear();
+        connect(m_fotoroll->model(), &QAbstractItemModel::modelReset, this, [this] {
+            if (m_fotoroll->model()->rowCount() == 0) {
+                m_selectionUpdate.start();
+                emit currentItemChanged();
+            }
         });
     }
 }
@@ -110,6 +113,11 @@ void FilmRollView::togglePlayVideo()
 void FilmRollView::stepVideo(qint64 step)
 {
     m_imageView->stepVideo(step);
+}
+
+QModelIndex FilmRollView::currentIndex() const
+{
+    return m_fotoroll->currentIndex();
 }
 
 std::optional<MediaItem> FilmRollView::currentItem() const

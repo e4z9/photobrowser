@@ -17,4 +17,11 @@ QString resolveSymlinks(const QString &filePath)
     return fi.filePath();
 }
 
+#ifndef Q_OS_MACOS
+void moveToTrash(const QStringList &filePaths)
+{
+    // TODO
+}
+#endif
+
 } // namespace Util

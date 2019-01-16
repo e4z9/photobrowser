@@ -39,6 +39,7 @@ public:
     void togglePlayVideo();
     void stepVideo(qint64 step);
 
+    QModelIndex currentIndex() const;
     std::optional<MediaItem> currentItem() const;
 
 signals:
