@@ -3,6 +3,8 @@
 #include "directorytree.h"
 #include "filmrollview.h"
 
+#include "../util/fileutil.h"
+
 #include <qtc/progressindicator.h>
 
 #include <QAction>
@@ -72,15 +74,30 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     // file actions
     auto fileMenu = menubar->addMenu(tr("File"));
 
+    auto revealInFinder = fileMenu->addAction(tr("Reveal in Finder"));
+    revealInFinder->setShortcut({"o"});
+    connect(revealInFinder, &QAction::triggered, this, [this, imageView] {
+        const auto item = imageView->currentItem();
+        if (item)
+            Util::revealInFinder(item->filePath);
+    });
+
+    fileMenu->addSeparator();
+
     auto moveToTrash = fileMenu->addAction(tr("Move to Trash"));
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
     connect(moveToTrash, &QAction::triggered, this, [this, imageView] {
         m_model.moveItemAtIndexToTrash(imageView->currentIndex());
     });
 
-    connect(imageView, &FilmRollView::currentItemChanged, this, [imageView, moveToTrash] {
-        moveToTrash->setEnabled(imageView->currentItem().has_value());
-    });
+    connect(imageView,
+            &FilmRollView::currentItemChanged,
+            this,
+            [imageView, moveToTrash, revealInFinder] {
+                const bool hasItem = imageView->currentItem().has_value();
+                revealInFinder->setEnabled(hasItem);
+                moveToTrash->setEnabled(hasItem);
+            });
 
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
