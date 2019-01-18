@@ -9,6 +9,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QDesktopServices>
 #include <QEvent>
 #include <QMenuBar>
 #include <QSplitter>
@@ -80,6 +81,14 @@ BrowserWindow::BrowserWindow(QWidget *parent)
         const auto item = imageView->currentItem();
         if (item)
             Util::revealInFinder(item->filePath);
+    });
+
+    auto openInDefaultEditor = fileMenu->addAction(tr("Open in Default Editor"));
+    openInDefaultEditor->setShortcut({"ctrl+o"});
+    connect(openInDefaultEditor, &QAction::triggered, this, [this, imageView] {
+        const auto item = imageView->currentItem();
+        if (item)
+            QDesktopServices::openUrl(QUrl::fromLocalFile(item->filePath));
     });
 
     fileMenu->addSeparator();
