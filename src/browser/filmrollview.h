@@ -25,6 +25,11 @@ public:
                    QAbstractItemView *view,
                    const QStyleOptionViewItem &option,
                    const QModelIndex &index) override;
+
+private:
+    QRect paintThumbnail(QPainter *painter,
+                         const QStyleOptionViewItem &option,
+                         const QModelIndex &index) const;
 };
 
 class FilmRollView : public QWidget

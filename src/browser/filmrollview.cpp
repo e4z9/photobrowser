@@ -156,7 +156,7 @@ static QSize thumbnailSize(const int viewHeight, const QSize dimensions)
 static int availableHeight(const QStyleOptionViewItem &option)
 {
     if (!option.widget)
-        return 0;
+        return option.rect.height();
     return option.widget->height() - option.widget->style()->pixelMetric(QStyle::PM_ScrollBarExtent)
            - option.widget->style()->pixelMetric(QStyle::PM_ScrollView_ScrollBarSpacing);
 }
@@ -168,6 +168,57 @@ static QSize defaultSize()
 }
 
 MediaItemDelegate::MediaItemDelegate() = default;
+
+static QRect thumbRect(const QStyleOptionViewItem &option, const QSize &size)
+{
+    return {option.rect.x() + MARGIN - 1, option.rect.y() + MARGIN - 1, size.width(), size.height()};
+}
+
+QRect MediaItemDelegate::paintThumbnail(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+{
+    const auto thumbnail = index.data(int(MediaDirectoryModel::Role::Thumbnail)).value<QPixmap>();
+    if (!thumbnail.isNull()) {
+        const auto size = thumbnailSize(option.rect.height(), thumbnail.size());
+        const QRect tRect = thumbRect(option, size);
+        painter->drawPixmap(tRect, thumbnail);
+        return tRect;
+    }
+    // fallback frame
+    const auto value = index.data(int(MediaDirectoryModel::Role::Item));
+    const auto item = value.value<MediaItem>();
+    const auto size = thumbnailSize(option.rect.height(),
+                                    item.metaData ? item.metaData->dimensions : defaultSize());
+    const QRect tRect = thumbRect(option, size);
+    painter->save();
+    painter->setPen(Qt::black);
+    painter->drawRect(tRect);
+    painter->restore();
+    return tRect;
+}
+
+static void paintDuration(QPainter *painter,
+                          const QStyleOptionViewItem &option,
+                          const qint64 durationMs)
+{
+    QTime duration(0, 0);
+    duration = duration.addMSecs(durationMs);
+    const QString format = duration.hour() > 0 ? "HH:mm:ss" : "mm:ss";
+    const QString durationStr = duration.toString(format);
+    QFont durationFont = option.font;
+    durationFont.setPixelSize(std::min(option.rect.height() / 8, 12));
+    QFontMetrics fm(durationFont);
+    const QSize durationSize = fm.size(Qt::TextSingleLine, durationStr) + QSize(1, 1);
+    const QPoint bottomRight = option.rect.bottomRight();
+    const QRect durationRect(QPoint(bottomRight.x() - durationSize.width(),
+                                    bottomRight.y() - durationSize.height()),
+                             bottomRight);
+    painter->fillRect(durationRect, option.palette.brush(QPalette::Base));
+    painter->save();
+    painter->setPen(Qt::black);
+    painter->setFont(durationFont);
+    painter->drawText(durationRect, Qt::AlignCenter, durationStr);
+    painter->restore();
+}
 
 void MediaItemDelegate::paint(QPainter *painter,
                               const QStyleOptionViewItem &option,
@@ -184,49 +235,16 @@ void MediaItemDelegate::paint(QPainter *painter,
         return;
     const auto item = value.value<MediaItem>();
     const int height = availableHeight(option);
-    const auto thumbRect = [option](const QSize &size) {
-        return QRect(option.rect.x() + MARGIN - 1,
-                     option.rect.y() + MARGIN - 1,
-                     size.width(),
-                     size.height());
-    };
-    const auto thumbnail = index.data(int(MediaDirectoryModel::Role::Thumbnail)).value<QPixmap>();
-    QRect tRect;
-    if (!thumbnail.isNull()) {
-        const auto size = thumbnailSize(height, thumbnail.size());
-        tRect = thumbRect(size);
-        painter->drawPixmap(tRect, thumbnail);
-    } else {
-        const auto size = thumbnailSize(height,
-                                        item.metaData ? item.metaData->dimensions : defaultSize());
-        tRect = thumbRect(size);
-        if (item.metaData && item.metaData->thumbnail) {
-            painter->drawPixmap(tRect, *(item.metaData->thumbnail));
-        } else {
-            painter->setPen(Qt::black);
-            painter->drawRect(tRect);
-        }
-    }
+    const QRect availableRect(option.rect.x(), option.rect.y(), option.rect.width(), height);
+    QStyleOptionViewItem fixedOpt = option;
+    fixedOpt.rect = availableRect;
+
+    const QRect tRect = paintThumbnail(painter, fixedOpt, index);
 
     if (item.duration && *item.duration > 0) {
-        QTime duration(0, 0);
-        duration = duration.addMSecs(*item.duration);
-        const QString format = duration.hour() > 0 ? "HH:mm:ss" : "mm:ss";
-        const QString durationStr = duration.toString(format);
-        QFont durationFont = option.font;
-        durationFont.setPixelSize(std::min(option.rect.height() / 10, 12));
-        QFontMetrics fm(durationFont);
-        const QSize durationSize = fm.size(Qt::TextSingleLine, durationStr) + QSize(1, 1);
-        const QPoint bottomRight = tRect.bottomRight();
-        const QRect durationRect(QPoint(bottomRight.x() - durationSize.width(),
-                                        bottomRight.y() - durationSize.height()),
-                                 bottomRight);
-        painter->fillRect(durationRect, option.palette.brush(QPalette::Base));
-        painter->save();
-        painter->setPen(Qt::black);
-        painter->setFont(durationFont);
-        painter->drawText(durationRect, Qt::AlignCenter, durationStr);
-        painter->restore();
+        QStyleOptionViewItem opt = option;
+        opt.rect = tRect;
+        paintDuration(painter, opt, *item.duration);
     }
 }
 

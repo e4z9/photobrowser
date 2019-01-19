@@ -474,6 +474,8 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
         if (item.thumbnail)
             return *item.thumbnail;
         m_thumbnailGoverner.requestThumbnail(item);
+        if (item.metaData && item.metaData->thumbnail)
+            return *(item.metaData->thumbnail);
         return {};
     }
     return {};
