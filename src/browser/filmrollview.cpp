@@ -220,6 +220,27 @@ static void paintDuration(QPainter *painter,
     painter->restore();
 }
 
+static void paintLink(QPainter *painter, const QStyleOptionViewItem &option)
+{
+    const qreal xr = qMin(option.rect.height() / 15, 6);
+    const qreal yr = xr * 2 / 3;
+    const qreal y = option.rect.bottom() - yr - MARGIN / 2;
+    const qreal x = option.rect.x() + xr + MARGIN / 2;
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(QPen(Qt::white, 5));
+    painter->setBrush(Qt::white);
+    const auto ellipse = [&painter, x, y, xr, yr] {
+        painter->drawEllipse(QPointF(x, y), xr, yr);
+        painter->drawEllipse(QPointF(x + xr * 4 / 3, y), xr, yr);
+    };
+    ellipse();
+    painter->setPen(QPen(Qt::black, 1));
+    painter->setBrush({});
+    ellipse();
+    painter->restore();
+}
+
 void MediaItemDelegate::paint(QPainter *painter,
                               const QStyleOptionViewItem &option,
                               const QModelIndex &index) const
@@ -246,6 +267,9 @@ void MediaItemDelegate::paint(QPainter *painter,
         opt.rect = tRect;
         paintDuration(painter, opt, *item.duration);
     }
+
+    if (item.filePath != item.resolvedFilePath)
+        paintLink(painter, option);
 }
 
 static QSize itemSize(const MediaItem &item)
