@@ -200,10 +200,7 @@ static void paintDuration(QPainter *painter,
                           const QStyleOptionViewItem &option,
                           const qint64 durationMs)
 {
-    QTime duration(0, 0);
-    duration = duration.addMSecs(durationMs);
-    const QString format = duration.hour() > 0 ? "HH:mm:ss" : "mm:ss";
-    const QString durationStr = duration.toString(format);
+    const QString durationStr = durationToString(durationMs);
     QFont durationFont = option.font;
     durationFont.setPixelSize(std::min(option.rect.height() / 8, 12));
     QFontMetrics fm(durationFont);
@@ -291,12 +288,4 @@ QSize MediaItemDelegate::sizeHint(const QStyleOptionViewItem &option, const QMod
     const auto item = value.value<MediaItem>();
     // TODO exiv2 might not be able to handle it, but Qt probably can (e.g. videos)
     return thumbnailSize(availableHeight(option), itemSize(item)) + QSize(2 * MARGIN, 2 * MARGIN);
-}
-
-bool MediaItemDelegate::helpEvent(QHelpEvent *event,
-                                  QAbstractItemView *view,
-                                  const QStyleOptionViewItem &option,
-                                  const QModelIndex &index)
-{
-    return false;
 }

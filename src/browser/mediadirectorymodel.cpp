@@ -478,6 +478,39 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
             return *(item.metaData->thumbnail);
         return {};
     }
+    if (role == Qt::ToolTipRole) {
+        static constexpr char format[] = "dd.MM.yyyy HH:mm:ss";
+        QString tooltip = "<html><body>";
+        const auto addRow = [&tooltip](const QString &title, const QString &value) {
+            tooltip += "<tr><td style=\"padding-right: 5px\">" + title + "</td><td>" + value
+                       + "</td></tr>";
+        };
+        tooltip += "<table>";
+        addRow(tr("File:"), item.fileName);
+        if (item.resolvedFilePath != item.filePath) {
+            tooltip += "<tr/>";
+            addRow(tr("Original:"), item.resolvedFilePath);
+        }
+        if (item.duration) {
+            tooltip += "<tr/>";
+            addRow(tr("Duration:"), durationToString(*item.duration));
+        }
+        if (item.metaData) {
+            tooltip += "<tr/>";
+            addRow(tr("Dimensions:"),
+                   tr("%1 x %2")
+                       .arg(item.metaData->dimensions.width())
+                       .arg(item.metaData->dimensions.height()));
+            if (item.metaData->created)
+                addRow(tr("Date:"), item.metaData->created->toString(format));
+        }
+        tooltip += "<tr/>";
+        addRow(tr("Created:"), item.created.toString(format));
+        addRow(tr("Modified:"), item.lastModified.toString(format));
+        tooltip += "</table>";
+        tooltip += "</body></html>";
+        return tooltip;
+    }
     return {};
 }
 
@@ -494,4 +527,12 @@ void MediaDirectoryModel::insertItems(int index, const MediaItems &items)
         m_items.insert(std::begin(m_items) + index, std::begin(items), std::end(items));
         endInsertRows();
     }
+}
+
+QString durationToString(const qint64 durationMs)
+{
+    QTime duration(0, 0);
+    duration = duration.addMSecs(durationMs);
+    const QString format = duration.hour() > 0 ? "HH:mm:ss" : "mm:ss";
+    return duration.toString(format);
 }

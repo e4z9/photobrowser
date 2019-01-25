@@ -29,6 +29,8 @@ public:
     MediaType type;
 };
 
+QString durationToString(const qint64 durationMs);
+
 using MediaItems = std::vector<MediaItem>;
 Q_DECLARE_METATYPE(MediaItem)
 

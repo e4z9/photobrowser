@@ -21,10 +21,6 @@ public:
                const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
-    bool helpEvent(QHelpEvent *event,
-                   QAbstractItemView *view,
-                   const QStyleOptionViewItem &option,
-                   const QModelIndex &index) override;
 
 private:
     QRect paintThumbnail(QPainter *painter,
