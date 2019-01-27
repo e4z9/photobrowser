@@ -3,6 +3,7 @@
 #include "mediadirectorymodel.h"
 
 #include <QMainWindow>
+#include <QSettings>
 #include <QTimer>
 
 QT_BEGIN_NAMESPACE
@@ -19,6 +20,9 @@ class BrowserWindow : public QMainWindow
 
 public:
     BrowserWindow(QWidget *parent = nullptr);
+
+    void restore(QSettings *settings);
+    void save(QSettings *settings);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
 

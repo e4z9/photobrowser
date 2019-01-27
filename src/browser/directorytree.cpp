@@ -90,6 +90,16 @@ void DirectoryTree::setRootPath(const QString &path)
         m_dirTree->setCurrentIndex(rootIndex);
 }
 
+QString DirectoryTree::rootPath() const
+{
+    return path(m_dirTree->rootIndex());
+}
+
+void DirectoryTree::setCurrentPath(const QString &path)
+{
+    m_dirTree->setCurrentIndex(m_dirModel->index(path));
+}
+
 QString DirectoryTree::path(const QModelIndex &index) const
 {
     if (!index.isValid())

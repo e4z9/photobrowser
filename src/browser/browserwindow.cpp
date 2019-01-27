@@ -136,6 +136,38 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     });
 }
 
+const char kGeometry[] = "Geometry";
+const char kWindowState[] = "WindowState";
+const char kRootPath[] = "RootPath";
+const char kCurrentPath[] = "CurrentPath";
+const char kIncludeSubFolders[] = "IncludeSubFolders";
+
+void BrowserWindow::restore(QSettings *settings)
+{
+    if (!settings)
+        return;
+    restoreState(settings->value(kWindowState).toByteArray());
+    restoreGeometry(settings->value(kGeometry).toByteArray());
+    const auto rootPathValue = settings->value(kRootPath);
+    if (rootPathValue.isValid())
+        m_fileTree->setRootPath(rootPathValue.toString());
+    const auto currentPathValue = settings->value(kCurrentPath);
+    if (currentPathValue.isValid())
+        m_fileTree->setCurrentPath(currentPathValue.toString());
+    m_recursive->setChecked(settings->value(kIncludeSubFolders, false).toBool());
+}
+
+void BrowserWindow::save(QSettings *settings)
+{
+    if (!settings)
+        return;
+    settings->setValue(kGeometry, saveGeometry());
+    settings->setValue(kWindowState, saveState());
+    settings->setValue(kRootPath, m_fileTree->rootPath());
+    settings->setValue(kCurrentPath, m_fileTree->currentPath());
+    settings->setValue(kIncludeSubFolders, m_recursive->isChecked());
+}
+
 bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_progressIndicator->parentWidget() && event->type() == QEvent::Resize)

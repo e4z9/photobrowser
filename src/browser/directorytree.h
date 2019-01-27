@@ -15,6 +15,8 @@ public:
     explicit DirectoryTree(QWidget *parent = nullptr);
 
     void setRootPath(const QString &path);
+    QString rootPath() const;
+    void setCurrentPath(const QString &path);
     QString currentPath() const;
 
 signals:
