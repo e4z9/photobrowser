@@ -108,6 +108,15 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                 moveToTrash->setEnabled(hasItem);
             });
 
+    // view actions
+    auto viewMenu = menubar->addMenu(tr("Show")); // using "view" adds stupid other actions automatically
+
+    auto recursive = viewMenu->addAction(m_recursive->text());
+    recursive->setCheckable(true);
+    recursive->setChecked(m_recursive->isChecked());
+    connect(m_recursive, &QCheckBox::toggled, recursive, &QAction::setChecked);
+    connect(recursive, &QAction::toggled, m_recursive, &QCheckBox::setChecked);
+
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
 
