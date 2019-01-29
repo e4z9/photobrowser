@@ -2,6 +2,8 @@
 
 #include <qtc/runextensions.h>
 
+#include <QGestureEvent>
+#include <QGraphicsObject>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsVideoItem>
 
@@ -20,6 +22,9 @@ ImageView::ImageView()
     setRenderHint(QPainter::SmoothPixmapTransform);
     setRenderHint(QPainter::Antialiasing);
     setFocusPolicy(Qt::NoFocus);
+
+    viewport()->grabGesture(Qt::PinchGesture);
+    viewport()->installEventFilter(this);
 
     connect(&m_player,
             &QMediaPlayer::mediaStatusChanged,
@@ -86,6 +91,17 @@ void ImageView::stepVideo(qint64 step)
     if (pos >= m_player.duration())
         pos = m_player.duration() - 1;
     m_player.setPosition(pos);
+}
+
+bool ImageView::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::Gesture) {
+        auto ge = static_cast<QGestureEvent *>(event);
+        if (auto pg = static_cast<QPinchGesture *>(ge->gesture(Qt::PinchGesture)))
+            scale(pg->scaleFactor(), pg->scaleFactor());
+        return true;
+    }
+    return QGraphicsView::eventFilter(watched, event);
 }
 
 void ImageView::setItem(QGraphicsItem *item)
