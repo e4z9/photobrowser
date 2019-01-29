@@ -115,6 +115,21 @@ void FilmRollView::stepVideo(qint64 step)
     m_imageView->stepVideo(step);
 }
 
+void FilmRollView::zoomIn()
+{
+    m_imageView->scale(1.1, 1.1);
+}
+
+void FilmRollView::zoomOut()
+{
+    m_imageView->scale(.9, .9);
+}
+
+void FilmRollView::scaleToFit()
+{
+    m_imageView->scaleToFit();
+}
+
 QModelIndex FilmRollView::currentIndex() const
 {
     return m_fotoroll->currentIndex();

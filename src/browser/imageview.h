@@ -20,10 +20,11 @@ public:
     void togglePlayVideo();
     void stepVideo(qint64 step);
 
+    void scaleToFit();
+
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    void scaleToFit();
     void setItem(QGraphicsItem *item);
 
     QGraphicsItem *m_item = nullptr;

@@ -40,6 +40,10 @@ public:
     void togglePlayVideo();
     void stepVideo(qint64 step);
 
+    void zoomIn();
+    void zoomOut();
+    void scaleToFit();
+
     QModelIndex currentIndex() const;
     std::optional<MediaItem> currentItem() const;
 

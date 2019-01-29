@@ -117,6 +117,20 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     connect(m_recursive, &QCheckBox::toggled, recursive, &QAction::setChecked);
     connect(recursive, &QAction::toggled, m_recursive, &QCheckBox::setChecked);
 
+    viewMenu->addSeparator();
+
+    auto zoomIn = viewMenu->addAction(tr("Zoom In"));
+    zoomIn->setShortcut({"+"});
+    connect(zoomIn, &QAction::triggered, imageView, &FilmRollView::zoomIn);
+
+    auto zoomOut = viewMenu->addAction(tr("Zoom Out"));
+    zoomOut->setShortcut({"-"});
+    connect(zoomOut, &QAction::triggered, imageView, &FilmRollView::zoomOut);
+
+    auto scaleToFit = viewMenu->addAction(tr("Scale to Fit"));
+    scaleToFit->setShortcut({"="});
+    connect(scaleToFit, &QAction::triggered, imageView, &FilmRollView::scaleToFit);
+
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
 
