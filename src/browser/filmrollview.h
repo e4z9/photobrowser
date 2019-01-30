@@ -9,6 +9,7 @@
 
 #include <optional.h>
 
+class Fotoroll;
 class ImageView;
 class MediaDirectoryModel;
 
@@ -53,7 +54,7 @@ signals:
 private:
     void select(const QModelIndex &index);
 
-    QListView *m_fotoroll;
+    Fotoroll *m_fotoroll;
     ImageView *m_imageView;
     QTimer m_selectionUpdate;
 };

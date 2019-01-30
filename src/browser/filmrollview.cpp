@@ -22,12 +22,14 @@ public:
     bool event(QEvent *ev) override
     {
         if (ev->type() == QEvent::Resize) {
+            m_ignoreSelection = true;
             const auto selection = selectionModel()->selection();
             const auto current = selectionModel()->currentIndex();
             // force relayout since we want the thumbnails to resize
             reset();
             selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
             selectionModel()->setCurrentIndex(current, QItemSelectionModel::Current);
+            m_ignoreSelection = false;
         }
         return QListView::event(ev);
     }
@@ -48,6 +50,7 @@ public:
     }
 
     MediaItemDelegate m_delegate;
+    bool m_ignoreSelection = false;
 };
 
 static constexpr int MARGIN = 10;
@@ -86,8 +89,10 @@ void FilmRollView::setModel(QAbstractItemModel *model)
     m_fotoroll->setModel(model);
     if (m_fotoroll->selectionModel()) {
         connect(m_fotoroll->selectionModel(), &QItemSelectionModel::currentChanged, this, [this] {
-            m_selectionUpdate.start();
-            emit currentItemChanged();
+            if (!m_fotoroll->m_ignoreSelection) {
+                m_selectionUpdate.start();
+                emit currentItemChanged();
+            }
         });
     }
     if (m_fotoroll->model()) {
