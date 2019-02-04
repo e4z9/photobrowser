@@ -31,6 +31,9 @@ private:
 
     DirectoryTree *m_fileTree = nullptr;
     QCheckBox *m_recursive = nullptr;
+    QAction *m_sortExif = nullptr;
+    QAction *m_sortFileName = nullptr;
+    QAction *m_sortRandom = nullptr;
     Utils::ProgressIndicator *m_progressIndicator = nullptr;
     QTimer m_progressTimer;
     MediaDirectoryModel m_model;

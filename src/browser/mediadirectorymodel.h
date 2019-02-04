@@ -99,11 +99,14 @@ class MediaDirectoryModel : public QAbstractItemModel
 
 public:
     enum class Role { Item = Qt::UserRole, Thumbnail };
+    enum class SortKey { ExifCreation, FileName, Random };
 
     MediaDirectoryModel();
 
     void setPath(const QString &path, bool recursive);
     void moveItemAtIndexToTrash(const QModelIndex &index);
+    void setSortKey(SortKey key);
+    SortKey sortKey() const;
 
 signals:
     void loadingStarted();
@@ -124,4 +127,5 @@ private:
     MediaItems m_items;
     QFutureWatcher<ResultList> m_futureWatcher;
     mutable ThumbnailGoverner m_thumbnailGoverner;
+    SortKey m_sortKey = SortKey::ExifCreation;
 };

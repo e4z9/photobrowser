@@ -14,6 +14,9 @@
 #include <QMimeDatabase>
 #include <QVideoSurfaceFormat>
 
+#include <algorithm>
+#include <random>
+
 Q_LOGGING_CATEGORY(logGov, "browser.thumbnails", QtWarningMsg)
 const int THUMBNAIL_SIZE = 400;
 
@@ -68,13 +71,89 @@ const QDateTime &createdDateTime(const MediaItem &item)
     return item.lastModified;
 }
 
-bool itemLessThan(const MediaItem &a, const MediaItem &b)
+bool itemLessThanExifCreation(const MediaItem &a, const MediaItem &b)
 {
     const QDateTime &da = createdDateTime(a);
     const QDateTime &db = createdDateTime(b);
     if (da == db)
         return a.resolvedFilePath < b.resolvedFilePath;
     return da < db;
+}
+
+bool itemLessThanFileName(const MediaItem &a, const MediaItem &b)
+{
+    return a.fileName.compare(b.fileName, Qt::CaseInsensitive) < 0;
+}
+
+std::function<bool(const MediaItem &, const MediaItem &)> itemLessThan(
+    MediaDirectoryModel::SortKey key)
+{
+    if (key == MediaDirectoryModel::SortKey::ExifCreation)
+        return itemLessThanExifCreation;
+    return itemLessThanFileName;
+}
+
+template<class C>
+void shuffle(C &&c)
+{
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(c.begin(), c.end(), g);
+}
+
+void arrange(MediaItems &items, MediaDirectoryModel::SortKey key)
+{
+    if (key == MediaDirectoryModel::SortKey::Random)
+        shuffle(items);
+    else
+        std::sort(items.begin(), items.end(), itemLessThan(key));
+}
+
+MediaDirectoryModel::ResultList addSorted(MediaDirectoryModel::SortKey key,
+                                          MediaItems &target,
+                                          const MediaItems &source)
+{
+    MediaDirectoryModel::ResultList resultList;
+    target.reserve(target.size() + source.size());
+    auto current = source.begin();
+    const auto end = source.end();
+    auto insertionPoint = target.begin();
+    while (current != end) {
+        while (insertionPoint != target.end() && itemLessThan(key)(*insertionPoint, *current))
+            ++insertionPoint;
+        auto currentEnd = insertionPoint != target.end() ? current + 1 : source.end();
+        while (currentEnd != source.end() && itemLessThan(key)(*currentEnd, *insertionPoint))
+            ++currentEnd;
+        const auto insertionIndex = std::distance(target.begin(), insertionPoint);
+        const auto insertionCount = std::distance(current, currentEnd);
+        insertionPoint = target.insert(insertionPoint, current, currentEnd);
+        resultList.push_back({insertionIndex, MediaItems(current, currentEnd)});
+        insertionPoint += insertionCount;
+        current = currentEnd;
+    }
+    return resultList;
+}
+
+MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
+                                            MediaItems &target,
+                                            const MediaItems &source)
+{
+    if (key != MediaDirectoryModel::SortKey::Random)
+        return addSorted(key, target, source);
+    // random
+    MediaDirectoryModel::ResultList resultList;
+    target.reserve(target.size() + source.size());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    using distr_t = std::uniform_int_distribution<MediaItems::size_type>;
+    using distr_param_t = distr_t::param_type;
+    distr_t distribute;
+    for (const MediaItem &item : source) {
+        const auto insertionIndex = distribute(g, distr_param_t(0, target.size()));
+        target.insert(target.begin() + insertionIndex, item);
+        resultList.push_back({insertionIndex, {item}});
+    }
+    return resultList;
 }
 
 auto findRunningItem(std::vector<ThumbnailGoverner::RunningItem> &running,
@@ -294,29 +373,6 @@ void ThumbnailGoverner::startPending()
     startItem(filePath, type, orientation);
 }
 
-static MediaDirectoryModel::ResultList addSorted(MediaItems &target, const MediaItems &source)
-{
-    MediaDirectoryModel::ResultList resultList;
-    target.reserve(target.size() + source.size());
-    auto current = source.begin();
-    const auto end = source.end();
-    auto insertionPoint = target.begin();
-    while (current != end) {
-        while (insertionPoint != target.end() && itemLessThan(*insertionPoint, *current))
-            ++insertionPoint;
-        auto currentEnd = insertionPoint != target.end() ? current + 1 : source.end();
-        while (currentEnd != source.end() && itemLessThan(*currentEnd, *insertionPoint))
-            ++currentEnd;
-        const auto insertionIndex = std::distance(target.begin(), insertionPoint);
-        const auto insertionCount = std::distance(current, currentEnd);
-        insertionPoint = target.insert(insertionPoint, current, currentEnd);
-        resultList.push_back({insertionIndex, MediaItems(current, currentEnd)});
-        insertionPoint += insertionCount;
-        current = currentEnd;
-    }
-    return resultList;
-}
-
 MediaDirectoryModel::MediaDirectoryModel()
 {
     connect(&m_thumbnailGoverner,
@@ -401,29 +457,30 @@ void MediaDirectoryModel::setPath(const QString &path, bool recursive)
     m_items.clear();
     endResetModel();
     emit loadingStarted();
-    m_futureWatcher.setFuture(Utils::runAsync([path, recursive](QFutureInterface<ResultList> &fi) {
-        MediaItems results = collectItems(fi, path);
-        if (fi.isCanceled())
-            return;
-        std::sort(results.begin(), results.end(), itemLessThan);
-        if (!results.empty())
-            fi.reportResult({{0, results}});
-        if (recursive) {
-            QDirIterator it(path,
-                            QDir::Dirs | QDir::NoDotAndDotDot,
-                            QDirIterator::Subdirectories | QDirIterator::FollowSymlinks);
-            while (it.hasNext()) {
-                if (fi.isCanceled())
-                    break;
-                const QString dir = it.next();
-                MediaItems dirResults = collectItems(fi, dir);
-                std::sort(dirResults.begin(), dirResults.end(), itemLessThan);
-                const ResultList resultList = addSorted(results, dirResults);
-                if (!fi.isCanceled() && !resultList.empty())
-                    fi.reportResult(resultList);
+    m_futureWatcher.setFuture(
+        Utils::runAsync([sortKey = m_sortKey, path, recursive](QFutureInterface<ResultList> &fi) {
+            MediaItems results = collectItems(fi, path);
+            if (fi.isCanceled())
+                return;
+            arrange(results, sortKey);
+            if (!results.empty())
+                fi.reportResult({{0, results}});
+            if (recursive) {
+                QDirIterator it(path,
+                                QDir::Dirs | QDir::NoDotAndDotDot,
+                                QDirIterator::Subdirectories | QDirIterator::FollowSymlinks);
+                while (it.hasNext()) {
+                    if (fi.isCanceled())
+                        break;
+                    const QString dir = it.next();
+                    MediaItems dirResults = collectItems(fi, dir);
+                    arrange(dirResults, sortKey);
+                    const ResultList resultList = addArranged(sortKey, results, dirResults);
+                    if (!fi.isCanceled() && !resultList.empty())
+                        fi.reportResult(resultList);
+                }
             }
-        }
-    }));
+        }));
 }
 
 void MediaDirectoryModel::moveItemAtIndexToTrash(const QModelIndex &index)
@@ -435,6 +492,22 @@ void MediaDirectoryModel::moveItemAtIndexToTrash(const QModelIndex &index)
     Util::moveToTrash({item.filePath});
     m_items.erase(std::begin(m_items) + index.row());
     endRemoveRows();
+}
+
+void MediaDirectoryModel::setSortKey(SortKey key)
+{
+    m_sortKey = key;
+    beginResetModel();
+    if (key == SortKey::Random)
+        shuffle(m_items);
+    else
+        std::sort(m_items.begin(), m_items.end(), itemLessThan(key));
+    endResetModel();
+}
+
+MediaDirectoryModel::SortKey MediaDirectoryModel::sortKey() const
+{
+    return m_sortKey;
 }
 
 QModelIndex MediaDirectoryModel::index(int row, int column, const QModelIndex &parent) const

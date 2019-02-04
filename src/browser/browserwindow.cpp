@@ -117,6 +117,28 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     connect(m_recursive, &QCheckBox::toggled, recursive, &QAction::setChecked);
     connect(recursive, &QAction::toggled, m_recursive, &QCheckBox::setChecked);
 
+    auto sortMenu = viewMenu->addMenu(tr("Sort"));
+
+    m_sortExif = sortMenu->addAction(tr("Exif/Creation Date"), this, [this] {
+        m_model.setSortKey(MediaDirectoryModel::SortKey::ExifCreation);
+    });
+    m_sortExif->setCheckable(true);
+    m_sortExif->setChecked(true);
+
+    m_sortFileName = sortMenu->addAction(tr("File Name"), this, [this] {
+        m_model.setSortKey(MediaDirectoryModel::SortKey::FileName);
+    });
+    m_sortFileName->setCheckable(true);
+
+    m_sortRandom = sortMenu->addAction(tr("Random"), this, [this] {
+        m_model.setSortKey(MediaDirectoryModel::SortKey::Random);
+    });
+    m_sortRandom->setCheckable(true);
+
+    auto sortKeyGroup = new QActionGroup(sortMenu);
+    for (auto action : std::vector<QAction *>{m_sortExif, m_sortFileName, m_sortRandom})
+        sortKeyGroup->addAction(action);
+
     viewMenu->addSeparator();
 
     auto zoomIn = viewMenu->addAction(tr("Zoom In"));
@@ -161,6 +183,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
 const char kGeometry[] = "Geometry";
 const char kWindowState[] = "WindowState";
+const char kSortKey[] = "SortKey";
 const char kRootPath[] = "RootPath";
 const char kCurrentPath[] = "CurrentPath";
 const char kIncludeSubFolders[] = "IncludeSubFolders";
@@ -171,6 +194,22 @@ void BrowserWindow::restore(QSettings *settings)
         return;
     restoreState(settings->value(kWindowState).toByteArray());
     restoreGeometry(settings->value(kGeometry).toByteArray());
+    const auto sortKeyValue = settings->value(kSortKey);
+    if (sortKeyValue.isValid() && sortKeyValue.canConvert<int>()) {
+        const auto sortKey = MediaDirectoryModel::SortKey(sortKeyValue.toInt());
+        switch (sortKey) {
+        case MediaDirectoryModel::SortKey::ExifCreation:
+            m_sortExif->setChecked(true);
+            break;
+        case MediaDirectoryModel::SortKey::FileName:
+            m_sortFileName->setChecked(true);
+            break;
+        case MediaDirectoryModel::SortKey::Random:
+            m_sortRandom->setChecked(true);
+            break;
+        }
+        m_model.setSortKey(sortKey);
+    }
     const auto rootPathValue = settings->value(kRootPath);
     if (rootPathValue.isValid())
         m_fileTree->setRootPath(rootPathValue.toString());
@@ -186,6 +225,7 @@ void BrowserWindow::save(QSettings *settings)
         return;
     settings->setValue(kGeometry, saveGeometry());
     settings->setValue(kWindowState, saveState());
+    settings->setValue(kSortKey, int(m_model.sortKey()));
     settings->setValue(kRootPath, m_fileTree->rootPath());
     settings->setValue(kCurrentPath, m_fileTree->currentPath());
     settings->setValue(kIncludeSubFolders, m_recursive->isChecked());
