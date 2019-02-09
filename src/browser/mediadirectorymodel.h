@@ -130,4 +130,6 @@ private:
     QFutureWatcher<ResultList> m_futureWatcher;
     mutable ThumbnailGoverner m_thumbnailGoverner;
     SortKey m_sortKey = SortKey::ExifCreation;
+    QString m_path;
+    bool m_isRecursive;
 };

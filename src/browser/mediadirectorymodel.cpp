@@ -458,6 +458,8 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
 void MediaDirectoryModel::setPath(const QString &path, bool recursive)
 {
     cancelAndWait();
+    m_path = path;
+    m_isRecursive = recursive;
     beginResetModel();
     m_items.clear();
     endResetModel();
@@ -502,8 +504,13 @@ void MediaDirectoryModel::moveItemAtIndexToTrash(const QModelIndex &index)
 
 void MediaDirectoryModel::setSortKey(SortKey key)
 {
-    cancelAndWait();
     m_sortKey = key;
+    if (m_futureWatcher.isRunning()) {
+        // we need to restart the scanning
+        cancelAndWait();
+        setPath(m_path, m_isRecursive);
+        return;
+    }
     beginResetModel();
     if (key == SortKey::Random)
         shuffle(m_items);
