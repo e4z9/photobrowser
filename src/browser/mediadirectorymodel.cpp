@@ -402,6 +402,11 @@ MediaDirectoryModel::MediaDirectoryModel()
             &MediaDirectoryModel::loadingFinished);
 }
 
+MediaDirectoryModel::~MediaDirectoryModel()
+{
+    cancelAndWait();
+}
+
 static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &type)
 {
     for (const QByteArray &value : list) {
@@ -452,7 +457,7 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
 
 void MediaDirectoryModel::setPath(const QString &path, bool recursive)
 {
-    m_futureWatcher.cancel();
+    cancelAndWait();
     beginResetModel();
     m_items.clear();
     endResetModel();
@@ -485,6 +490,7 @@ void MediaDirectoryModel::setPath(const QString &path, bool recursive)
 
 void MediaDirectoryModel::moveItemAtIndexToTrash(const QModelIndex &index)
 {
+    cancelAndWait();
     if (!index.isValid() || index.row() >= m_items.size())
         return;
     beginRemoveRows(index.parent(), index.row(), index.row());
@@ -496,6 +502,7 @@ void MediaDirectoryModel::moveItemAtIndexToTrash(const QModelIndex &index)
 
 void MediaDirectoryModel::setSortKey(SortKey key)
 {
+    cancelAndWait();
     m_sortKey = key;
     beginResetModel();
     if (key == SortKey::Random)
@@ -600,6 +607,12 @@ void MediaDirectoryModel::insertItems(int index, const MediaItems &items)
         m_items.insert(std::begin(m_items) + index, std::begin(items), std::end(items));
         endInsertRows();
     }
+}
+
+void MediaDirectoryModel::cancelAndWait()
+{
+    m_futureWatcher.cancel();
+    m_futureWatcher.waitForFinished();
 }
 
 QString durationToString(const qint64 durationMs)

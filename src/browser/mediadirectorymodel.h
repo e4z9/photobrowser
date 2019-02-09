@@ -102,6 +102,7 @@ public:
     enum class SortKey { ExifCreation, FileName, Random };
 
     MediaDirectoryModel();
+    ~MediaDirectoryModel() override;
 
     void setPath(const QString &path, bool recursive);
     void moveItemAtIndexToTrash(const QModelIndex &index);
@@ -123,6 +124,7 @@ public:
 
 private:
     void insertItems(int index, const MediaItems &items);
+    void cancelAndWait();
 
     MediaItems m_items;
     QFutureWatcher<ResultList> m_futureWatcher;
