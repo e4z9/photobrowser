@@ -22,15 +22,23 @@ set(QTC_UTILS_SOURCES
 add_compile_definitions(QTCREATOR_UTILS_EXPORT=)
 
 add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
-   "main.cpp"
+   "app.cpp"
    "browserwindow.cpp"
    "directorytree.cpp"
-   "mediadirectorymodel.cpp"
    "filmrollview.cpp"
    "imageview.cpp"
+   "main.cpp"
+   "mediadirectorymodel.cpp"
    ${QTC_UTILS_SOURCES}
 )
 include_directories("../3rdparty/")
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "de.zillerey.photobrowser"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+)
 
 target_link_libraries(${PROJECT_NAME} Qt5::Core)
 target_link_libraries(${PROJECT_NAME} Qt5::Gui)
