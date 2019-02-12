@@ -37,6 +37,9 @@ ImageView::ImageView()
                     QTimer::singleShot(0, this, [this] { m_player.pause(); });
                 }
             });
+    m_scaleToFitTimer.setSingleShot(true);
+    m_scaleToFitTimer.setInterval(50);
+    connect(&m_scaleToFitTimer, &QTimer::timeout, this, &ImageView::scaleToFit);
 }
 
 void ImageView::clear()
@@ -97,11 +100,22 @@ bool ImageView::eventFilter(QObject *watched, QEvent *event)
 {
     if (event->type() == QEvent::Gesture) {
         auto ge = static_cast<QGestureEvent *>(event);
-        if (auto pg = static_cast<QPinchGesture *>(ge->gesture(Qt::PinchGesture)))
-            scale(pg->scaleFactor(), pg->scaleFactor());
+        if (auto pg = static_cast<QPinchGesture *>(ge->gesture(Qt::PinchGesture))) {
+            m_scalingToFit = false;
+            scale(pg->scaleFactor());
+        }
         return true;
     }
     return QGraphicsView::eventFilter(watched, event);
+}
+
+bool ImageView::event(QEvent *ev)
+{
+    if (ev->type() == QEvent::Resize) {
+        if (m_scalingToFit)
+            m_scaleToFitTimer.start();
+    }
+    return QGraphicsView::event(ev);
 }
 
 void ImageView::setItem(QGraphicsItem *item)
@@ -115,7 +129,14 @@ void ImageView::setItem(QGraphicsItem *item)
 
 void ImageView::scaleToFit()
 {
+    m_scalingToFit = true;
     if (!m_item)
         return;
     fitInView(m_item, Qt::KeepAspectRatio);
+}
+
+void ImageView::scale(qreal s)
+{
+    m_scalingToFit = false;
+    QGraphicsView::scale(s, s);
 }

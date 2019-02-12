@@ -122,12 +122,12 @@ void FilmRollView::stepVideo(qint64 step)
 
 void FilmRollView::zoomIn()
 {
-    m_imageView->scale(1.1, 1.1);
+    m_imageView->scale(1.1);
 }
 
 void FilmRollView::zoomOut()
 {
-    m_imageView->scale(.9, .9);
+    m_imageView->scale(.9);
 }
 
 void FilmRollView::scaleToFit()

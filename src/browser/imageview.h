@@ -6,6 +6,7 @@
 #include <QGraphicsView>
 #include <QImage>
 #include <QMediaPlayer>
+#include <QTimer>
 
 #include <memory>
 
@@ -21,8 +22,10 @@ public:
     void stepVideo(qint64 step);
 
     void scaleToFit();
+    void scale(qreal s);
 
     bool eventFilter(QObject *watched, QEvent *event) override;
+    bool event(QEvent *ev) override;
 
 private:
     void setItem(QGraphicsItem *item);
@@ -30,5 +33,7 @@ private:
     QGraphicsItem *m_item = nullptr;
     QFuture<QImage> m_loadingFuture;
     QMediaPlayer m_player;
+    QTimer m_scaleToFitTimer;
     bool m_preloading = false;
+    bool m_scalingToFit = false;
 };
