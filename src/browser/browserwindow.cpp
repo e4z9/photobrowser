@@ -172,13 +172,17 @@ BrowserWindow::BrowserWindow(QWidget *parent)
         imageView->stepVideo(-10000);
     });
 
-    connect(imageView, &FilmRollView::currentItemChanged, this, [imageView, playStop, stepForward, stepBackward] {
-        const auto currentItem = imageView->currentItem();
-        const bool enabled = (currentItem && currentItem->type == MediaType::Video);
-        playStop->setEnabled(enabled);
-        stepForward->setEnabled(enabled);
-        stepBackward->setEnabled(enabled);
-    });
+    connect(imageView,
+            &FilmRollView::currentItemChanged,
+            this,
+            [this, imageView, playStop, stepForward, stepBackward] {
+                const auto currentItem = imageView->currentItem();
+                const bool enabled = (currentItem && currentItem->type == MediaType::Video);
+                playStop->setEnabled(enabled);
+                stepForward->setEnabled(enabled);
+                stepBackward->setEnabled(enabled);
+                updateWindowTitle(currentItem);
+            });
 }
 
 const char kGeometry[] = "Geometry";
@@ -248,4 +252,15 @@ void BrowserWindow::adaptProgressIndicator()
               pp->height() - sh.height() - st->pixelMetric(QStyle::PM_LayoutBottomMargin),
               sh.width(),
               sh.height()));
+}
+
+void BrowserWindow::updateWindowTitle(const std::optional<MediaItem> &item)
+{
+    if (!item) {
+        setWindowTitle({});
+    } else {
+        const QDateTime dt = item->metaData && item->metaData->created ? *(item->metaData->created)
+                                                                       : item->created;
+        setWindowTitle(tr("%1 - %2").arg(item->fileName, dt.toString(Qt::SystemLocaleLongDate)));
+    }
 }

@@ -28,6 +28,7 @@ public:
 
 private:
     void adaptProgressIndicator();
+    void updateWindowTitle(const std::optional<MediaItem> &item);
 
     DirectoryTree *m_fileTree = nullptr;
     QCheckBox *m_recursive = nullptr;
