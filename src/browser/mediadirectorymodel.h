@@ -24,7 +24,7 @@ public:
     QDateTime created;
     QDateTime lastModified;
     std::optional<QPixmap> thumbnail;
-    std::optional<Util::MetaData> metaData;
+    Util::MetaData metaData;
     std::optional<qint64> duration;
     MediaType type;
 };

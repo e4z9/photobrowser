@@ -207,7 +207,8 @@ QRect MediaItemDelegate::paintThumbnail(QPainter *painter, const QStyleOptionVie
     const auto value = index.data(int(MediaDirectoryModel::Role::Item));
     const auto item = value.value<MediaItem>();
     const auto size = thumbnailSize(option.rect.height(),
-                                    item.metaData ? item.metaData->dimensions : defaultSize());
+                                    item.metaData.dimensions ? *item.metaData.dimensions
+                                                             : defaultSize());
     const QRect tRect = thumbRect(option, size);
     painter->save();
     painter->setPen(Qt::black);
@@ -293,8 +294,8 @@ static QSize itemSize(const MediaItem &item)
 {
     if (item.thumbnail)
         return item.thumbnail->size();
-    if (item.metaData)
-        return item.metaData->dimensions;
+    if (item.metaData.dimensions)
+        return *item.metaData.dimensions;
     return defaultSize();
 }
 

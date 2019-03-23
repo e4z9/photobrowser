@@ -64,8 +64,8 @@ void createThumbnailImage(QFutureInterface<ThumbnailItem> &fi,
 
 const QDateTime &createdDateTime(const MediaItem &item)
 {
-    if (item.metaData && item.metaData->created)
-        return *(item.metaData->created);
+    if (item.metaData.created)
+        return *item.metaData.created;
     if (item.created.isValid())
         return item.created;
     return item.lastModified;
@@ -303,15 +303,13 @@ void ThumbnailGoverner::requestThumbnail(const MediaItem &item, bool cancelRunni
         return;
     qDebug(logGov) << "requested" << item.resolvedFilePath << "("
                    << (item.type == MediaType::Image ? "Image" : "Video") << ")";
-    const Util::Orientation orientation = item.metaData ? item.metaData->orientation
-                                                        : Util::Orientation::Normal;
     if (m_running.size() >= MAX_THREADS) {
         while (m_pending.size() >= MAX_PENDING)
             m_pending.pop_front();
-        m_pending.push_back({item.resolvedFilePath, item.type, orientation});
+        m_pending.push_back({item.resolvedFilePath, item.type, item.metaData.orientation});
         qDebug(logGov) << "(scheduled)";
     } else {
-        startItem(item.resolvedFilePath, item.type, orientation);
+        startItem(item.resolvedFilePath, item.type, item.metaData.orientation);
     }
     logQueueSizes();
 }
@@ -562,19 +560,17 @@ static QString toolTip(const MediaItem &item)
         addRow(MediaDirectoryModel::tr("Original:"), item.resolvedFilePath);
     }
     addRow(MediaDirectoryModel::tr("Size:"), sizeToString(QFileInfo(item.resolvedFilePath).size()));
-    if (item.duration) {
-        addEmptyRow();
+    addEmptyRow();
+    if (item.duration)
         addRow(MediaDirectoryModel::tr("Duration:"), durationToString(*item.duration));
-    }
-    if (item.metaData) {
-        addEmptyRow();
+    if (item.metaData.dimensions) {
         addRow(MediaDirectoryModel::tr("Dimensions:"),
                MediaDirectoryModel::tr("%1 x %2")
-                   .arg(item.metaData->dimensions.width())
-                   .arg(item.metaData->dimensions.height()));
-        if (item.metaData->created)
-            addRow(MediaDirectoryModel::tr("Date:"), item.metaData->created->toString(format));
+                   .arg(item.metaData.dimensions->width())
+                   .arg(item.metaData.dimensions->height()));
     }
+    if (item.metaData.created)
+        addRow(MediaDirectoryModel::tr("Date:"), item.metaData.created->toString(format));
     addEmptyRow();
     addRow(MediaDirectoryModel::tr("Created:"), item.created.toString(format));
     addRow(MediaDirectoryModel::tr("Modified:"), item.lastModified.toString(format));
@@ -598,8 +594,8 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
         if (item.thumbnail)
             return *item.thumbnail;
         m_thumbnailGoverner.requestThumbnail(item);
-        if (item.metaData && item.metaData->thumbnail)
-            return *(item.metaData->thumbnail);
+        if (item.metaData.thumbnail)
+            return *item.metaData.thumbnail;
         return {};
     }
     if (role == Qt::ToolTipRole)

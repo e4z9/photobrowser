@@ -76,12 +76,12 @@ QMatrix matrixForOrientation(const QSize &size, Util::Orientation orientation)
     return {};
 }
 
-std::optional<MetaData> metaData(const QString &filePath)
+MetaData metaData(const QString &filePath)
 {
+    MetaData data;
     try {
         auto image = Exiv2::ImageFactory::open(filePath.toStdString());
         image->readMetadata();
-        MetaData data;
         const Exiv2::ExifData &exifData = image->exifData();
         data.created = extractCreationDateTime(exifData);
         data.orientation = extractOrientation(exifData);
@@ -90,7 +90,7 @@ std::optional<MetaData> metaData(const QString &filePath)
         return data;
     } catch (Exiv2::Error &error) {
     }
-    return {};
+    return data;
 }
 
 } // namespace Util

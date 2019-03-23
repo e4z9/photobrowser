@@ -79,13 +79,11 @@ static bool safeReplace(const QString &source, const QString &target)
 static std::optional<QDateTime> targetDate(const QString &canonicalFilePath, bool isSymlink)
 {
     const auto meta = Util::metaData(canonicalFilePath);
-    const auto dt = meta ? meta->created : std::nullopt;
-    if (!dt) {
-        if (isSymlink)
-            return QFileInfo(canonicalFilePath).lastModified();
-        return {};
-    }
-    return dt;
+    if (meta.created)
+        return meta.created;
+    if (isSymlink)
+        return QFileInfo(canonicalFilePath).lastModified();
+    return {};
 }
 
 static bool resetCreationDateToMetaData(const QString &filePath)

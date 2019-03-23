@@ -259,8 +259,7 @@ void BrowserWindow::updateWindowTitle(const std::optional<MediaItem> &item)
     if (!item) {
         setWindowTitle({});
     } else {
-        const QDateTime dt = item->metaData && item->metaData->created ? *(item->metaData->created)
-                                                                       : item->created;
+        const QDateTime dt = item->metaData.created ? *(item->metaData.created) : item->created;
         setWindowTitle(tr("%1 - %2").arg(item->fileName, dt.toString(Qt::SystemLocaleLongDate)));
     }
 }

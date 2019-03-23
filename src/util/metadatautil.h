@@ -22,13 +22,13 @@ enum class Orientation {
 class MetaData
 {
 public:
-    QSize dimensions;
+    std::optional<QSize> dimensions;
     std::optional<QDateTime> created;
     std::optional<QPixmap> thumbnail;
     Orientation orientation;
 };
 
 QMatrix matrixForOrientation(const QSize &size, Util::Orientation orientation);
-std::optional<MetaData> metaData(const QString &filePath);
+MetaData metaData(const QString &filePath);
 
 } // namespace Util

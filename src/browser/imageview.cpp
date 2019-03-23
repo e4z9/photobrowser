@@ -57,8 +57,7 @@ void ImageView::setItem(const MediaItem &item)
     if (item.type == MediaType::Image) {
         m_loadingFuture = Utils::runAsync(imageForFilePath,
                                           item.resolvedFilePath,
-                                          item.metaData ? item.metaData->orientation
-                                                        : Util::Orientation::Normal);
+                                          item.metaData.orientation);
         Utils::onResultReady(m_loadingFuture, this, [this](const QImage &image) {
             m_player.setMedia({});
             auto item = new QGraphicsPixmapItem(QPixmap::fromImage(image));
