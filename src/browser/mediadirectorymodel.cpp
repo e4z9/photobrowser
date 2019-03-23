@@ -383,8 +383,8 @@ MediaDirectoryModel::MediaDirectoryModel()
                     MediaItem &item = m_items.at(i);
                     if (item.resolvedFilePath == resolvedFilePath) {
                         item.thumbnail = pixmap;
-                        if (item.duration)
-                            item.duration = *duration;
+                        if (duration)
+                            item.metaData.duration = duration;
                         const QModelIndex mi = index(i, 0, QModelIndex());
                         dataChanged(mi, mi);
                     }
@@ -447,7 +447,6 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                          fi.lastModified(),
                          std::nullopt,
                          metaData,
-                         type == MediaType::Image ? std::nullopt : std::make_optional<qint64>(0),
                          type});
     }
     return std::move(items);
@@ -561,8 +560,8 @@ static QString toolTip(const MediaItem &item)
     }
     addRow(MediaDirectoryModel::tr("Size:"), sizeToString(QFileInfo(item.resolvedFilePath).size()));
     addEmptyRow();
-    if (item.duration)
-        addRow(MediaDirectoryModel::tr("Duration:"), durationToString(*item.duration));
+    if (item.metaData.duration)
+        addRow(MediaDirectoryModel::tr("Duration:"), durationToString(*item.metaData.duration));
     if (item.metaData.dimensions) {
         addRow(MediaDirectoryModel::tr("Dimensions:"),
                MediaDirectoryModel::tr("%1 x %2")

@@ -25,6 +25,7 @@ public:
     std::optional<QSize> dimensions;
     std::optional<QDateTime> created;
     std::optional<QPixmap> thumbnail;
+    std::optional<qint64> duration;
     Orientation orientation;
 };
 

@@ -280,10 +280,10 @@ void MediaItemDelegate::paint(QPainter *painter,
 
     const QRect tRect = paintThumbnail(painter, fixedOpt, index);
 
-    if (item.duration && *item.duration > 0) {
+    if (item.metaData.duration && *item.metaData.duration > 0) {
         QStyleOptionViewItem opt = option;
         opt.rect = tRect;
-        paintDuration(painter, opt, *item.duration);
+        paintDuration(painter, opt, *item.metaData.duration);
     }
 
     if (item.filePath != item.resolvedFilePath)
