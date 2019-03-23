@@ -85,7 +85,8 @@ MetaData metaData(const QString &filePath)
         const Exiv2::ExifData &exifData = image->exifData();
         data.created = extractCreationDateTime(exifData);
         data.orientation = extractOrientation(exifData);
-        data.dimensions = dimensions({image->pixelWidth(), image->pixelHeight()}, data.orientation);
+        if (image->pixelWidth() != 0 && image->pixelHeight() != 0)
+            data.dimensions = dimensions({image->pixelWidth(), image->pixelHeight()}, data.orientation);
         data.thumbnail = extractThumbnail(exifData, data.orientation);
         return data;
     } catch (Exiv2::Error &error) {
