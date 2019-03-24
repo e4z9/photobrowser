@@ -2,7 +2,7 @@
 
 #include <exiv2/exiv2.hpp>
 
-static std::optional<QDateTime> extractCreationDateTime(const Exiv2::ExifData &exifData)
+static std::optional<QDateTime> extractExifCreationDateTime(const Exiv2::ExifData &exifData)
 {
     if (exifData.empty())
         return {};
@@ -16,9 +16,11 @@ static std::optional<QDateTime> extractCreationDateTime(const Exiv2::ExifData &e
     return {};
 }
 
-static std::optional<QPixmap> extractThumbnail(const Exiv2::ExifData &exifData,
-                                               Util::Orientation orientation)
+static std::optional<QPixmap> extractExifThumbnail(const Exiv2::ExifData &exifData,
+                                                   Util::Orientation orientation)
 {
+    if (exifData.empty())
+        return {};
     Exiv2::ExifThumbC thumb(exifData);
     std::string ext = thumb.extension();
     if (ext.empty())
@@ -30,7 +32,7 @@ static std::optional<QPixmap> extractThumbnail(const Exiv2::ExifData &exifData,
     return {};
 }
 
-static Util::Orientation extractOrientation(const Exiv2::ExifData &exifData)
+static Util::Orientation extractExifOrientation(const Exiv2::ExifData &exifData)
 {
     if (exifData.empty())
         return Util::Orientation::Normal;
@@ -39,6 +41,73 @@ static Util::Orientation extractOrientation(const Exiv2::ExifData &exifData)
     if (md != exifData.end() && md->typeId() == Exiv2::unsignedShort)
         return Util::Orientation(md->toLong());
     return Util::Orientation::Normal;
+}
+
+static std::optional<QSize> extractExifPixelDimensions(const Exiv2::ExifData &exifData)
+{
+    if (exifData.empty())
+        return {};
+    const Exiv2::ExifKey xkey("Exif.Photo.PixelXDimension");
+    const auto xmd = exifData.findKey(xkey);
+    const Exiv2::ExifKey ykey("Exif.Photo.PixelYDimension");
+    const auto ymd = exifData.findKey(ykey);
+    if (xmd != exifData.end() && xmd->typeId() == Exiv2::unsignedLong && ymd != exifData.end()
+        && ymd->typeId() == Exiv2::unsignedLong)
+        return QSize(xmd->toLong(), ymd->toLong());
+    return {};
+}
+
+static std::optional<QDateTime> extractXmpDateTime(const Exiv2::XmpData &data)
+{
+    if (data.empty())
+        return {};
+    const Exiv2::XmpKey key("Xmp.video.DateUTC");
+    const auto md = data.findKey(key);
+    if (md != data.end() && md->typeId() == Exiv2::xmpText) {
+        bool ok;
+        const qint64 secs = QString::fromStdString(md->toString()).toLongLong(&ok);
+        if (ok) {
+            const QDateTime baseDt({1904, 1, 1}, QTime(), Qt::UTC);
+            return baseDt.addSecs(secs).toLocalTime();
+        }
+    }
+    return {};
+}
+
+static std::optional<QSize> extractXmpDimensions(const Exiv2::XmpData &data)
+{
+    if (data.empty())
+        return {};
+    const Exiv2::XmpKey xkey("Xmp.video.Width");
+    const auto xmd = data.findKey(xkey);
+    const Exiv2::XmpKey ykey("Xmp.video.Height");
+    const auto ymd = data.findKey(ykey);
+    if (xmd != data.end() && xmd->typeId() == Exiv2::xmpText && ymd != data.end()
+        && ymd->typeId() == Exiv2::xmpText) {
+        bool xok;
+        const int width = QString::fromStdString(xmd->toString()).toInt(&xok);
+        bool yok;
+        const int height = QString::fromStdString(ymd->toString()).toInt(&yok);
+        if (xok && yok)
+            return QSize(width, height);
+    }
+    return {};
+
+}
+
+static std::optional<qint64> extractXmpDuration(const Exiv2::XmpData &data)
+{
+    if (data.empty())
+        return {};
+    const Exiv2::XmpKey key("Xmp.video.Duration");
+    const auto md = data.findKey(key);
+    if (md != data.end() && md->typeId() == Exiv2::xmpText) {
+        bool ok;
+        const qint64 msecs = QString::fromStdString(md->toString()).toLongLong(&ok);
+        if (ok)
+            return msecs;
+    }
+    return {};
 }
 
 static QSize dimensions(const QSize &imageSize, Util::Orientation orientation)
@@ -82,12 +151,26 @@ MetaData metaData(const QString &filePath)
     try {
         auto image = Exiv2::ImageFactory::open(filePath.toStdString());
         image->readMetadata();
+
+        // check exif data
         const Exiv2::ExifData &exifData = image->exifData();
-        data.created = extractCreationDateTime(exifData);
-        data.orientation = extractOrientation(exifData);
-        if (image->pixelWidth() != 0 && image->pixelHeight() != 0)
-            data.dimensions = dimensions({image->pixelWidth(), image->pixelHeight()}, data.orientation);
-        data.thumbnail = extractThumbnail(exifData, data.orientation);
+        data.created = extractExifCreationDateTime(exifData);
+        data.orientation = extractExifOrientation(exifData);
+        data.dimensions = extractExifPixelDimensions(exifData);
+        data.thumbnail = extractExifThumbnail(exifData, data.orientation);
+
+        // check xmp data
+        const Exiv2::XmpData &xmpData = image->xmpData();
+        if (!data.created)
+            data.created = extractXmpDateTime(xmpData);
+        if (!data.dimensions)
+            data.dimensions = extractXmpDimensions(xmpData);
+        data.duration = extractXmpDuration(xmpData);
+
+        if (!data.dimensions && image->pixelWidth() != 0 && image->pixelHeight() != 0)
+            data.dimensions = QSize(image->pixelWidth(), image->pixelHeight());
+        if (data.dimensions)
+            data.dimensions = dimensions(*data.dimensions, data.orientation);
         return data;
     } catch (Exiv2::Error &error) {
     }
