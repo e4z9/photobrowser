@@ -153,6 +153,16 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     scaleToFit->setShortcut({"="});
     connect(scaleToFit, &QAction::triggered, imageView, &FilmRollView::scaleToFit);
 
+    viewMenu->addSeparator();
+
+    auto previousItem = viewMenu->addAction(tr("Previous"));
+    previousItem->setShortcut({"Left"});
+    connect(previousItem, &QAction::triggered, imageView, &FilmRollView::previous);
+
+    auto nextItem = viewMenu->addAction(tr("Next"));
+    nextItem->setShortcut({"Right"});
+    connect(nextItem, &QAction::triggered, imageView, &FilmRollView::next);
+
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
 

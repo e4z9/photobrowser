@@ -135,6 +135,24 @@ void FilmRollView::scaleToFit()
     m_imageView->scaleToFit();
 }
 
+void FilmRollView::previous()
+{
+    const QModelIndex index = m_fotoroll->selectionModel()->currentIndex();
+    if (index.isValid() && index.row() > 0) {
+        m_fotoroll->selectionModel()->setCurrentIndex(index.siblingAtRow(index.row() - 1),
+                                                      QItemSelectionModel::SelectCurrent);
+    }
+}
+
+void FilmRollView::next()
+{
+    const QModelIndex index = m_fotoroll->selectionModel()->currentIndex();
+    if (index.isValid() && index.row() + 1 < m_fotoroll->model()->rowCount(index.parent())) {
+        m_fotoroll->selectionModel()->setCurrentIndex(index.siblingAtRow(index.row() + 1),
+                                                      QItemSelectionModel::SelectCurrent);
+    }
+}
+
 QModelIndex FilmRollView::currentIndex() const
 {
     return m_fotoroll->currentIndex();

@@ -45,6 +45,9 @@ public:
     void zoomOut();
     void scaleToFit();
 
+    void previous();
+    void next();
+
     QModelIndex currentIndex() const;
     std::optional<MediaItem> currentItem() const;
 
