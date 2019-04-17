@@ -1,5 +1,7 @@
 #include "metadatautil.h"
 
+#include <QPainter>
+
 #include <exiv2/exiv2.hpp>
 
 static std::optional<QDateTime> extractExifCreationDateTime(const Exiv2::ExifData &exifData)
@@ -17,6 +19,7 @@ static std::optional<QDateTime> extractExifCreationDateTime(const Exiv2::ExifDat
 }
 
 static std::optional<QPixmap> extractExifThumbnail(const Exiv2::ExifData &exifData,
+                                                   const QSize &imageDimensions,
                                                    Util::Orientation orientation)
 {
     if (exifData.empty())
@@ -27,8 +30,39 @@ static std::optional<QPixmap> extractExifThumbnail(const Exiv2::ExifData &exifDa
         return {};
     const Exiv2::DataBuf &data = thumb.copy();
     QPixmap pixmap;
-    if (pixmap.loadFromData(data.pData_, data.size_))
-        return pixmap.transformed(Util::matrixForOrientation(pixmap.size(), orientation));
+    // cut thumbnail to original's aspect ratio, some cameras do weird things
+    if (pixmap.loadFromData(data.pData_, data.size_)) {
+        const auto rotatedPixmap = pixmap.transformed(
+            Util::matrixForOrientation(pixmap.size(), orientation));
+        if (rotatedPixmap.size().width() == 0 || rotatedPixmap.height() == 0
+            || imageDimensions.width() == 0 || imageDimensions.height() == 0) {
+            return rotatedPixmap;
+        }
+        // potentially cut left/right
+        const int widthFromHeight = rotatedPixmap.height() * imageDimensions.width()
+                                    / imageDimensions.height();
+        const int xoffset = widthFromHeight < rotatedPixmap.width()
+                                ? (rotatedPixmap.width() - widthFromHeight) / 2
+                                : 0;
+        const int targetWidth = widthFromHeight < rotatedPixmap.width() ? widthFromHeight
+                                                                        : rotatedPixmap.width();
+        // potentially cut top/bottom
+        const int heightFromWidth = rotatedPixmap.width() * imageDimensions.height()
+                                    / imageDimensions.width();
+        const int yoffset = heightFromWidth < rotatedPixmap.height()
+                                ? (rotatedPixmap.height() - heightFromWidth) / 2
+                                : 0;
+        const int targetHeight = heightFromWidth < rotatedPixmap.height() ? heightFromWidth
+                                                                          : rotatedPixmap.height();
+        if (xoffset == 0 && yoffset == 0)
+            return rotatedPixmap;
+        QPixmap cutPixmap(targetWidth, targetHeight);
+        QPainter painter(&cutPixmap);
+        painter.drawPixmap(QPoint(0, 0),
+                           rotatedPixmap,
+                           QRect(xoffset, yoffset, targetWidth, targetHeight));
+        return cutPixmap;
+    }
     return {};
 }
 
@@ -157,7 +191,6 @@ MetaData metaData(const QString &filePath)
         data.created = extractExifCreationDateTime(exifData);
         data.orientation = extractExifOrientation(exifData);
         data.dimensions = extractExifPixelDimensions(exifData);
-        data.thumbnail = extractExifThumbnail(exifData, data.orientation);
 
         // check xmp data
         const Exiv2::XmpData &xmpData = image->xmpData();
@@ -171,6 +204,9 @@ MetaData metaData(const QString &filePath)
             data.dimensions = QSize(image->pixelWidth(), image->pixelHeight());
         if (data.dimensions)
             data.dimensions = dimensions(*data.dimensions, data.orientation);
+        data.thumbnail = extractExifThumbnail(exifData,
+                                              data.dimensions ? *data.dimensions : QSize(),
+                                              data.orientation);
         return data;
     } catch (Exiv2::Error &error) {
     }
