@@ -66,7 +66,7 @@ private:
 
     MediaItems m_items;
     QFutureWatcher<ResultList> m_futureWatcher;
-    mutable ThumbnailGoverner m_thumbnailGoverner;
+    mutable ThumbnailCreator m_thumbnailCreator;
     SortKey m_sortKey = SortKey::ExifCreation;
     QString m_path;
     bool m_isRecursive;

@@ -7,52 +7,39 @@
 #include <QMediaPlayer>
 
 #include <deque>
+#include <unordered_map>
 
 class MediaItem;
 enum class MediaType;
 
-class ThumbnailItem
-{
-public:
-    QImage image;
-    std::optional<qint64> duration;
-};
-
-class VideoSnapshotCreator : public QAbstractVideoSurface
+class Thumbnailer : public QObject
 {
     Q_OBJECT
 
 public:
-    static QFuture<ThumbnailItem> requestSnapshot(const QString &resolvedFilePath);
+    virtual MediaType mediaType() const = 0;
+    virtual bool hasCapacity() const = 0;
+    virtual bool isRunning(const QString &resolvedFilePath) const = 0;
+    virtual void cancel(const QString &resolvedFilePath) = 0;
+    virtual void requestThumbnail(const QString &resolvedFilePath,
+                                  Util::Orientation orientation,
+                                  const int maxSize)
+        = 0;
 
-    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
-        QAbstractVideoBuffer::HandleType type = QAbstractVideoBuffer::NoHandle) const override;
-    bool isFormatSupported(const QVideoSurfaceFormat &format) const override;
-    bool start(const QVideoSurfaceFormat &format) override;
-    bool present(const QVideoFrame &frame) override;
-
-private:
-    VideoSnapshotCreator(const QString &resolvedFilePath);
-    void cancel();
-
-    QFutureInterface<ThumbnailItem> m_fi;
-    QFutureWatcher<ThumbnailItem> m_watcher;
-    QMediaPlayer m_player;
-    QImage::Format m_imageFormat;
-    QSize m_imageSize;
-    QRect m_imageRect;
-    bool m_readyForSnapshot = false;
-    bool m_snapshotDone = false;
+signals:
+    void thumbnailReady(const QString &resolvedFilePath,
+                        const QImage &image,
+                        std::optional<qint64> duration);
 };
 
-class ThumbnailGoverner : public QObject
+class ThumbnailCreator : public QObject
 {
     Q_OBJECT
+
 public:
+    ThumbnailCreator();
+
     void requestThumbnail(const MediaItem &item, bool cancelRunning = false);
-    void cancel(const QString &resolvedFilePath);
-
-    using RunningItem = std::pair<QString, QFuture<ThumbnailItem>>;
 
 signals:
     void thumbnailReady(const QString &resolvedFilePath,
@@ -60,12 +47,13 @@ signals:
                         std::optional<qint64> duration);
 
 private:
+    bool isRunning(const QString &resolvedFilePath);
+    void cancel(const QString &resolvedFilePath);
     void startItem(const QString &resolvedFilePath,
                    const MediaType type,
                    Util::Orientation orientation);
     void startPending();
-    void logQueueSizes() const;
 
     std::deque<std::tuple<QString, MediaType, Util::Orientation>> m_pending;
-    std::vector<RunningItem> m_running;
+    std::unordered_map<MediaType, std::unique_ptr<Thumbnailer>> m_thumbnailers;
 };

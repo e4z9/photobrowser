@@ -112,8 +112,8 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 
 MediaDirectoryModel::MediaDirectoryModel()
 {
-    connect(&m_thumbnailGoverner,
-            &ThumbnailGoverner::thumbnailReady,
+    connect(&m_thumbnailCreator,
+            &ThumbnailCreator::thumbnailReady,
             this,
             [this](const QString &resolvedFilePath,
                    const QPixmap &pixmap,
@@ -331,7 +331,7 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
     if (role == int(Role::Thumbnail)) {
         if (item.thumbnail)
             return *item.thumbnail;
-        m_thumbnailGoverner.requestThumbnail(item);
+        m_thumbnailCreator.requestThumbnail(item);
         if (item.metaData.thumbnail)
             return *item.metaData.thumbnail;
         return {};
