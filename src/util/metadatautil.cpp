@@ -208,7 +208,7 @@ MetaData metaData(const QString &filePath)
                                               data.dimensions ? *data.dimensions : QSize(),
                                               data.orientation);
         return data;
-    } catch (Exiv2::Error &error) {
+    } catch (...) {
     }
     return data;
 }
