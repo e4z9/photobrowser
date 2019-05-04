@@ -2,6 +2,7 @@
 
 #include "directorytree.h"
 #include "filmrollview.h"
+#include "fullscreensplitter.h"
 
 #include "../util/fileutil.h"
 
@@ -12,19 +13,22 @@
 #include <QDesktopServices>
 #include <QEvent>
 #include <QMenuBar>
-#include <QSplitter>
 #include <QVBoxLayout>
 
 BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
+    , m_splitter(new FullscreenSplitter)
     , m_fileTree(new DirectoryTree)
     , m_recursive(new QCheckBox(tr("Include Subfolders")))
 {
-    auto splitter = new QSplitter(Qt::Horizontal);
-    setCentralWidget(splitter);
+    setCentralWidget(m_splitter);
+
+    m_splitter->setOrientation(Qt::Horizontal);
 
     auto imageView = new FilmRollView;
     imageView->setModel(&m_model);
+    m_splitter->setFullscreenChangedAction(
+        [imageView](bool fullscreen) { imageView->setFullscreen(fullscreen); });
 
     auto leftWidget = new QWidget;
     auto leftLayout = new QVBoxLayout;
@@ -38,10 +42,9 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     leftLayout->addWidget(m_fileTree, 10);
     leftLayout->addWidget(bottomLeftWidget);
 
-    splitter->addWidget(leftWidget);
-    splitter->addWidget(imageView);
-    splitter->setStretchFactor(0, 0);
-    splitter->setStretchFactor(1, 1);
+    m_splitter->setWidget(FullscreenSplitter::First, leftWidget);
+    m_splitter->setWidget(FullscreenSplitter::Second, imageView);
+    m_splitter->setFullscreenIndex(FullscreenSplitter::Second);
 
     setFocusProxy(m_fileTree);
 
@@ -163,6 +166,18 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     nextItem->setShortcut({"Right"});
     connect(nextItem, &QAction::triggered, imageView, &FilmRollView::next);
 
+    viewMenu->addSeparator();
+
+    m_toggleFullscreen = viewMenu->addAction(tr("Enter Full Screen"));
+    m_toggleFullscreen->setMenuRole(QAction::NoRole);
+    m_toggleFullscreen->setShortcut({"Meta+Ctrl+F"});
+    connect(m_toggleFullscreen, &QAction::triggered, this, [this] {
+        if (window()->isFullScreen())
+            window()->setWindowState(window()->windowState() & ~Qt::WindowFullScreen);
+        else
+            window()->setWindowState(window()->windowState() | Qt::WindowFullScreen);
+    });
+
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
 
@@ -193,6 +208,8 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                 stepBackward->setEnabled(enabled);
                 updateWindowTitle(currentItem);
             });
+
+    window()->installEventFilter(this);
 }
 
 const char kGeometry[] = "Geometry";
@@ -206,8 +223,8 @@ void BrowserWindow::restore(QSettings *settings)
 {
     if (!settings)
         return;
-    restoreState(settings->value(kWindowState).toByteArray());
     restoreGeometry(settings->value(kGeometry).toByteArray());
+    restoreState(settings->value(kWindowState).toByteArray());
     const auto sortKeyValue = settings->value(kSortKey);
     if (sortKeyValue.isValid() && sortKeyValue.canConvert<int>()) {
         const auto sortKey = MediaDirectoryModel::SortKey(sortKeyValue.toInt());
@@ -237,6 +254,9 @@ void BrowserWindow::save(QSettings *settings)
 {
     if (!settings)
         return;
+
+    if (window()->isFullScreen())
+        window()->setWindowState(windowState() & ~Qt::WindowFullScreen);
     settings->setValue(kGeometry, saveGeometry());
     settings->setValue(kWindowState, saveState());
     settings->setValue(kSortKey, int(m_model.sortKey()));
@@ -247,8 +267,16 @@ void BrowserWindow::save(QSettings *settings)
 
 bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_progressIndicator->parentWidget() && event->type() == QEvent::Resize)
+    if (watched == m_progressIndicator->parentWidget() && event->type() == QEvent::Resize) {
         adaptProgressIndicator();
+    } else if (watched == window() && event->type() == QEvent::WindowStateChange) {
+        if (window()->isFullScreen()) {
+            m_toggleFullscreen->setText(tr("Exit Full Screen"));
+        } else {
+            m_toggleFullscreen->setText(tr("Enter Full Screen"));
+        }
+        m_splitter->setFullscreen(isFullScreen());
+    }
     return QWidget::eventFilter(watched, event);
 }
 

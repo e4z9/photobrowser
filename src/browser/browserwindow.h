@@ -11,6 +11,7 @@ class QCheckBox;
 QT_END_NAMESPACE
 
 class DirectoryTree;
+class FullscreenSplitter;
 
 namespace Utils { class ProgressIndicator; }
 
@@ -30,11 +31,13 @@ private:
     void adaptProgressIndicator();
     void updateWindowTitle(const std::optional<MediaItem> &item);
 
+    FullscreenSplitter *m_splitter = nullptr;
     DirectoryTree *m_fileTree = nullptr;
     QCheckBox *m_recursive = nullptr;
     QAction *m_sortExif = nullptr;
     QAction *m_sortFileName = nullptr;
     QAction *m_sortRandom = nullptr;
+    QAction *m_toggleFullscreen = nullptr;
     Utils::ProgressIndicator *m_progressIndicator = nullptr;
     QTimer m_progressTimer;
     MediaDirectoryModel m_model;

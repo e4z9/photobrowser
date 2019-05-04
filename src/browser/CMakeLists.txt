@@ -26,6 +26,7 @@ add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
    "browserwindow.cpp"
    "directorytree.cpp"
    "filmrollview.cpp"
+   "fullscreensplitter.cpp"
    "imageview.cpp"
    "main.cpp"
    "mediadirectorymodel.cpp"

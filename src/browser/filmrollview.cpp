@@ -1,5 +1,6 @@
 #include "filmrollview.h"
 
+#include "fullscreensplitter.h"
 #include "imageview.h"
 
 #include <QAbstractItemDelegate>
@@ -57,6 +58,7 @@ static constexpr int MARGIN = 10;
 
 FilmRollView::FilmRollView(QWidget *parent)
     : QWidget(parent)
+    , m_splitter(new FullscreenSplitter)
 {
     auto vLayout = new QVBoxLayout;
     vLayout->setContentsMargins(0, 0, 0, 0);
@@ -65,13 +67,18 @@ FilmRollView::FilmRollView(QWidget *parent)
     m_imageView = new ImageView;
     m_fotoroll = new Fotoroll;
 
-    auto splitter = new QSplitter(Qt::Vertical);
-    splitter->addWidget(m_imageView);
-    splitter->addWidget(m_fotoroll);
-    splitter->setStretchFactor(0, 1);
-    splitter->setStretchFactor(1, 0);
+    m_splitter->setOrientation(Qt::Vertical);
+    m_splitter->setWidget(FullscreenSplitter::First, m_imageView);
+    m_splitter->setWidget(FullscreenSplitter::Second, m_fotoroll);
+    m_splitter->setFullscreenIndex(FullscreenSplitter::First);
+    m_splitter->setFullscreenChangedAction([this](bool fullscreen) {
+        auto p = m_imageView->palette();
+        p.setColor(QPalette::Base, fullscreen ? Qt::black : palette().color(QPalette::Base));
+        m_imageView->setPalette(p);
+        m_imageView->setFrameShape(fullscreen ? QFrame::NoFrame : QFrame::Panel);
+    });
 
-    layout()->addWidget(splitter);
+    layout()->addWidget(m_splitter);
 
     m_selectionUpdate.setInterval(80);
     m_selectionUpdate.setSingleShot(true);
@@ -167,6 +174,11 @@ std::optional<MediaItem> FilmRollView::currentItem() const
             return value.value<MediaItem>();
     }
     return {};
+}
+
+void FilmRollView::setFullscreen(bool fullscreen)
+{
+    m_splitter->setFullscreen(fullscreen);
 }
 
 void FilmRollView::select(const QModelIndex &index)

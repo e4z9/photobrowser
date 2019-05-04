@@ -10,6 +10,7 @@
 #include <optional.h>
 
 class Fotoroll;
+class FullscreenSplitter;
 class ImageView;
 class MediaDirectoryModel;
 
@@ -51,12 +52,15 @@ public:
     QModelIndex currentIndex() const;
     std::optional<MediaItem> currentItem() const;
 
+    void setFullscreen(bool fullscreen);
+
 signals:
     void currentItemChanged();
 
 private:
     void select(const QModelIndex &index);
 
+    FullscreenSplitter *m_splitter;
     Fotoroll *m_fotoroll;
     ImageView *m_imageView;
     QTimer m_selectionUpdate;
