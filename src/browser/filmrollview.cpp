@@ -71,12 +71,8 @@ FilmRollView::FilmRollView(QWidget *parent)
     m_splitter->setWidget(FullscreenSplitter::First, m_imageView);
     m_splitter->setWidget(FullscreenSplitter::Second, m_fotoroll);
     m_splitter->setFullscreenIndex(FullscreenSplitter::First);
-    m_splitter->setFullscreenChangedAction([this](bool fullscreen) {
-        auto p = m_imageView->palette();
-        p.setColor(QPalette::Base, fullscreen ? Qt::black : palette().color(QPalette::Base));
-        m_imageView->setPalette(p);
-        m_imageView->setFrameShape(fullscreen ? QFrame::NoFrame : QFrame::Panel);
-    });
+    m_splitter->setFullscreenChangedAction(
+        [this](bool fullscreen) { m_imageView->setFullscreen(fullscreen); });
 
     layout()->addWidget(m_splitter);
 

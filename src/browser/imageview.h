@@ -2,15 +2,34 @@
 
 #include "mediadirectorymodel.h"
 
-#include <QFuture>
-#include <QGraphicsView>
-#include <QImage>
-#include <QMediaPlayer>
 #include <QTimer>
+#include <QWidget>
 
-#include <memory>
+#include <unordered_map>
 
-class ImageView : public QGraphicsView
+QT_BEGIN_NAMESPACE
+class QStackedLayout;
+QT_END_NAMESPACE
+
+class Viewer
+{
+public:
+    virtual ~Viewer();
+
+    virtual void clear() = 0;
+    virtual void setItem(const MediaItem &item) = 0;
+
+    virtual void togglePlayVideo() = 0;
+    virtual void stepVideo(qint64 step) = 0;
+
+    virtual void scaleToFit() = 0;
+    virtual bool isScalingToFit() const = 0;
+    virtual void scale(qreal s) = 0;
+
+    virtual void setFullscreen(bool fullscreen) = 0;
+};
+
+class ImageView : public QWidget
 {
 public:
     ImageView();
@@ -24,16 +43,15 @@ public:
     void scaleToFit();
     void scale(qreal s);
 
+    void setFullscreen(bool fullscreen);
+
     bool eventFilter(QObject *watched, QEvent *event) override;
     bool event(QEvent *ev) override;
 
 private:
-    void setItem(QGraphicsItem *item);
+    Viewer *currentViewer() const;
 
-    QGraphicsItem *m_item = nullptr;
-    QFuture<QImage> m_loadingFuture;
-    QMediaPlayer m_player;
     QTimer m_scaleToFitTimer;
-    bool m_preloading = false;
-    bool m_scalingToFit = false;
+    std::unordered_map<MediaType, Viewer *> m_viewers;
+    QStackedLayout *m_layout;
 };
