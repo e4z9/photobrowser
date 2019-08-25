@@ -13,6 +13,7 @@
 #include <QDesktopServices>
 #include <QEvent>
 #include <QMenuBar>
+#include <QUrl>
 #include <QVBoxLayout>
 
 BrowserWindow::BrowserWindow(QWidget *parent)

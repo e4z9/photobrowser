@@ -11,21 +11,50 @@
 #include <QMediaPlayer>
 #include <QStackedLayout>
 
+#include <QCoreApplication>
+#include <QThread>
+#include <QTimer>
+
+using namespace sodium;
+
+template<typename A>
+std::function<void(A)> ensureMainThread(QObject *guard, const std::function<void(A)> &action)
+{
+    return [guard, action](const A &a) -> void {
+        if (guard->thread() == QCoreApplication::instance()->thread())
+            action(a);
+        QTimer::singleShot(0, guard, [action, a] { action(a); });
+    };
+}
+
 static QImage imageForFilePath(const QString &filePath, Util::Orientation orientation)
 {
     QImage image(filePath);
     return image.transformed(Util::matrixForOrientation(image.size(), orientation));
 }
 
+class Viewer
+{
+public:
+    virtual ~Viewer();
+
+    virtual void togglePlayVideo() = 0;
+    virtual void stepVideo(qint64 step) = 0;
+
+    virtual void scaleToFit() = 0;
+    virtual bool isScalingToFit() const = 0;
+    virtual void scale(qreal s) = 0;
+
+    virtual void setFullscreen(bool fullscreen) = 0;
+};
+
 Viewer::~Viewer() {}
 
 class VideoViewer : public QGraphicsView, public Viewer
 {
 public:
-    explicit VideoViewer(QWidget *parent = nullptr);
-
-    void clear() override;
-    void setItem(const MediaItem &item) override;
+    explicit VideoViewer(const cell<OptionalMediaItem> &video);
+    ~VideoViewer() override;
 
     void togglePlayVideo() override;
     void stepVideo(qint64 step) override;
@@ -37,14 +66,18 @@ public:
     void setFullscreen(bool fullscreen) override;
 
 private:
+    void setItem(const OptionalMediaItem &item);
+
+    cell<OptionalMediaItem> m_video;
+    std::function<void()> m_unsubscribe;
     QGraphicsItem *m_item = nullptr;
     QMediaPlayer m_player;
     bool m_scalingToFit = false;
     bool m_preloading = false;
 };
 
-VideoViewer::VideoViewer(QWidget *parent)
-    : QGraphicsView(parent)
+VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video)
+    : m_video(video)
     , m_player(nullptr, QMediaPlayer::VideoSurface)
 {
     setScene(new QGraphicsScene(this));
@@ -53,6 +86,7 @@ VideoViewer::VideoViewer(QWidget *parent)
     setRenderHint(QPainter::SmoothPixmapTransform);
     setRenderHint(QPainter::Antialiasing);
     setFocusPolicy(Qt::NoFocus);
+
     connect(&m_player,
             &QMediaPlayer::mediaStatusChanged,
             this,
@@ -64,30 +98,39 @@ VideoViewer::VideoViewer(QWidget *parent)
                     QTimer::singleShot(0, this, [this] { m_player.pause(); });
                 }
             });
+
+    m_unsubscribe = m_video.listen(
+        ensureMainThread<OptionalMediaItem>(this,
+                                            std::bind(&VideoViewer::setItem,
+                                                      this,
+                                                      std::placeholders::_1)));
 }
 
-void VideoViewer::clear()
+VideoViewer::~VideoViewer()
+{
+    m_unsubscribe();
+}
+
+void VideoViewer::setItem(const OptionalMediaItem &item)
 {
     m_item = nullptr;
     scene()->clear();
     scene()->setSceneRect({0, 0, 0, 0});
     resetTransform();
     m_player.setMedia({});
-}
 
-void VideoViewer::setItem(const MediaItem &item)
-{
-    clear();
-    auto grItem = new QGraphicsVideoItem;
-    QObject::connect(grItem, &QGraphicsVideoItem::nativeSizeChanged, this, &VideoViewer::scaleToFit);
-    m_player.setVideoOutput(grItem);
-    m_player.setMedia(QUrl::fromLocalFile(item.resolvedFilePath));
-    m_item = grItem;
-    scene()->addItem(m_item);
-    scene()->setSceneRect(m_item->boundingRect());
-    scaleToFit();
-    m_preloading = true;
-    m_player.play();
+    if (item) {
+        auto grItem = new QGraphicsVideoItem;
+        QObject::connect(grItem, &QGraphicsVideoItem::nativeSizeChanged, this, &VideoViewer::scaleToFit);
+        m_player.setVideoOutput(grItem);
+        m_player.setMedia(QUrl::fromLocalFile(item->resolvedFilePath));
+        m_item = grItem;
+        scene()->addItem(m_item);
+        scene()->setSceneRect(m_item->boundingRect());
+        scaleToFit();
+        m_preloading = true;
+        m_player.play();
+    }
 }
 
 void VideoViewer::togglePlayVideo()
@@ -135,10 +178,7 @@ void VideoViewer::setFullscreen(bool fullscreen)
 class PictureViewer : public QGraphicsView, public Viewer
 {
 public:
-    explicit PictureViewer(QWidget *parent = nullptr);
-
-    void clear() override;
-    void setItem(const MediaItem &item) override;
+    explicit PictureViewer(const cell<OptionalMediaItem> &image);
 
     void togglePlayVideo() override;
     void stepVideo(qint64 step) override;
@@ -150,15 +190,18 @@ public:
     void setFullscreen(bool fullscreen) override;
 
 private:
-    void setImage(const QString &filePath, Util::Orientation orientation);
+    void clear();
+    void setItem(const MediaItem &item);
 
+    cell<OptionalMediaItem> m_image;
+    std::function<void()> m_unsubscribe;
     QGraphicsItem *m_item = nullptr;
     QFuture<QImage> m_loadingFuture;
     bool m_scalingToFit = false;
 };
 
-PictureViewer::PictureViewer(QWidget *parent)
-    : QGraphicsView(parent)
+PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image)
+    : m_image(image)
 {
     setScene(new QGraphicsScene(this));
     setTransformationAnchor(AnchorUnderMouse);
@@ -166,6 +209,14 @@ PictureViewer::PictureViewer(QWidget *parent)
     setRenderHint(QPainter::SmoothPixmapTransform);
     setRenderHint(QPainter::Antialiasing);
     setFocusPolicy(Qt::NoFocus);
+
+    m_unsubscribe = image.listen(
+        ensureMainThread<OptionalMediaItem>(this, [this](const OptionalMediaItem &i) {
+            if (i)
+                setItem(*i);
+            else
+                clear();
+        }));
 }
 
 void PictureViewer::clear()
@@ -226,18 +277,39 @@ void PictureViewer::setFullscreen(bool fullscreen)
     setFrameShape(fullscreen ? QFrame::NoFrame : QFrame::Panel);
 }
 
-ImageView::ImageView()
-    : m_layout(new QStackedLayout)
+static std::function<OptionalMediaItem(OptionalMediaItem)> itemIfOfType(MediaType type)
 {
+    return [type](const OptionalMediaItem &i) { return i && i->type == type ? i : std::nullopt; };
+}
+
+ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item)
+    : m_item(item)
+    , m_layout(new QStackedLayout)
+{
+    transaction trans;
+    const cell<OptionalMediaItem> optImage = item.map(itemIfOfType(MediaType::Image));
+    const cell<OptionalMediaItem> optVideo = item.map(itemIfOfType(MediaType::Video));
+    auto pictureViewer = new PictureViewer(optImage);
+    auto videoViewer = new VideoViewer(optVideo);
+    auto noViewer = new QWidget;
+    m_layout->addWidget(pictureViewer);
+    m_layout->addWidget(videoViewer);
+    m_layout->addWidget(noViewer);
+    const cell<QWidget *> viewerWidget
+        = optImage.lift(optVideo,
+                        [pictureViewer, videoViewer, noViewer](const OptionalMediaItem &img,
+                                                               const OptionalMediaItem &vid) {
+                            return img ? pictureViewer : vid ? videoViewer : noViewer;
+                        });
+
+    m_unsubscribe = viewerWidget.listen(
+        ensureMainThread<QWidget *>(this, [this](QWidget *w) { m_layout->setCurrentWidget(w); }));
+
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);
 
-    auto pictureViewer = new PictureViewer;
-    auto videoViewer = new VideoViewer;
     m_viewers.insert({MediaType::Image, pictureViewer});
     m_viewers.insert({MediaType::Video, videoViewer});
-    m_layout->addWidget(pictureViewer);
-    m_layout->addWidget(videoViewer);
 
     setFocusPolicy(Qt::NoFocus);
 
@@ -249,39 +321,33 @@ ImageView::ImageView()
     connect(&m_scaleToFitTimer, &QTimer::timeout, this, &ImageView::scaleToFit);
 }
 
-void ImageView::clear()
+ImageView::~ImageView()
 {
-    currentViewer()->clear();
-}
-
-void ImageView::setItem(const MediaItem &item)
-{
-    const int targetStackIndex = int(item.type);
-    if (m_layout->currentIndex() != targetStackIndex) {
-        currentViewer()->clear();
-        m_layout->setCurrentIndex(targetStackIndex);
-    }
-    currentViewer()->setItem(item);
+    m_unsubscribe();
 }
 
 void ImageView::togglePlayVideo()
 {
-    currentViewer()->togglePlayVideo();
+    if (Viewer *viewer = currentViewer())
+        viewer->togglePlayVideo();
 }
 
 void ImageView::stepVideo(qint64 step)
 {
-    currentViewer()->stepVideo(step);
+    if (Viewer *viewer = currentViewer())
+        viewer->stepVideo(step);
 }
 
 void ImageView::scaleToFit()
 {
-    currentViewer()->scaleToFit();
+    if (Viewer *viewer = currentViewer())
+        viewer->scaleToFit();
 }
 
 void ImageView::scale(qreal s)
 {
-    currentViewer()->scale(s);
+    if (Viewer *viewer = currentViewer())
+        viewer->scale(s);
 }
 
 void ImageView::setFullscreen(bool fullscreen)
@@ -308,7 +374,7 @@ bool ImageView::eventFilter(QObject *watched, QEvent *event)
 bool ImageView::event(QEvent *ev)
 {
     if (ev->type() == QEvent::Resize) {
-        if (currentViewer()->isScalingToFit())
+        if (currentViewer() && currentViewer()->isScalingToFit())
             m_scaleToFitTimer.start();
     }
     return QWidget::event(ev);
@@ -316,5 +382,8 @@ bool ImageView::event(QEvent *ev)
 
 Viewer *ImageView::currentViewer() const
 {
-    return m_viewers.at(MediaType(m_layout->currentIndex()));
+    const int index = m_layout->currentIndex();
+    if (index >= int(m_viewers.size())) // wrong...
+        return nullptr;
+    return m_viewers.at(MediaType(index));
 }

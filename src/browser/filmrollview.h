@@ -9,6 +9,8 @@
 
 #include <optional.h>
 
+#include <sodium/sodium.h>
+
 class Fotoroll;
 class FullscreenSplitter;
 class ImageView;
@@ -50,7 +52,7 @@ public:
     void next();
 
     QModelIndex currentIndex() const;
-    std::optional<MediaItem> currentItem() const;
+    OptionalMediaItem currentItem() const;
 
     void setFullscreen(bool fullscreen);
 
@@ -60,6 +62,7 @@ signals:
 private:
     void select(const QModelIndex &index);
 
+    sodium::cell_sink<OptionalMediaItem> m_itemSink;
     FullscreenSplitter *m_splitter;
     Fotoroll *m_fotoroll;
     ImageView *m_imageView;

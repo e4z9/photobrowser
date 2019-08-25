@@ -58,13 +58,14 @@ static constexpr int MARGIN = 10;
 
 FilmRollView::FilmRollView(QWidget *parent)
     : QWidget(parent)
+    , m_itemSink(std::nullopt)
     , m_splitter(new FullscreenSplitter)
 {
     auto vLayout = new QVBoxLayout;
     vLayout->setContentsMargins(0, 0, 0, 0);
     setLayout(vLayout);
 
-    m_imageView = new ImageView;
+    m_imageView = new ImageView(m_itemSink);
     m_fotoroll = new Fotoroll;
 
     m_splitter->setOrientation(Qt::Vertical);
@@ -161,7 +162,7 @@ QModelIndex FilmRollView::currentIndex() const
     return m_fotoroll->currentIndex();
 }
 
-std::optional<MediaItem> FilmRollView::currentItem() const
+OptionalMediaItem FilmRollView::currentItem() const
 {
     const auto index = m_fotoroll->currentIndex();
     if (index.isValid()) {
@@ -180,12 +181,12 @@ void FilmRollView::setFullscreen(bool fullscreen)
 void FilmRollView::select(const QModelIndex &index)
 {
     if (!index.isValid())
-        m_imageView->clear();
+        m_itemSink.send(std::nullopt);
     const auto value = m_fotoroll->model()->data(index, int(MediaDirectoryModel::Role::Item));
     if (value.canConvert<MediaItem>()) {
-        m_imageView->setItem(value.value<MediaItem>());
+        m_itemSink.send(value.value<MediaItem>());
     } else {
-        m_imageView->clear();
+        m_itemSink.send(std::nullopt);
     }
 }
 

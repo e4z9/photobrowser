@@ -5,37 +5,25 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <optional.h>
+
+#include <sodium/sodium.h>
+
 #include <unordered_map>
 
 QT_BEGIN_NAMESPACE
 class QStackedLayout;
 QT_END_NAMESPACE
 
-class Viewer
-{
-public:
-    virtual ~Viewer();
-
-    virtual void clear() = 0;
-    virtual void setItem(const MediaItem &item) = 0;
-
-    virtual void togglePlayVideo() = 0;
-    virtual void stepVideo(qint64 step) = 0;
-
-    virtual void scaleToFit() = 0;
-    virtual bool isScalingToFit() const = 0;
-    virtual void scale(qreal s) = 0;
-
-    virtual void setFullscreen(bool fullscreen) = 0;
-};
+class Viewer;
 
 class ImageView : public QWidget
 {
 public:
-    ImageView();
+    ImageView(const sodium::cell<OptionalMediaItem> &item);
+    ~ImageView() override;
 
-    void clear();
-    void setItem(const MediaItem &item);
+    const sodium::cell<OptionalMediaItem> &item() const;
 
     void togglePlayVideo();
     void stepVideo(qint64 step);
@@ -45,12 +33,15 @@ public:
 
     void setFullscreen(bool fullscreen);
 
+protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     bool event(QEvent *ev) override;
 
 private:
     Viewer *currentViewer() const;
 
+    sodium::cell<OptionalMediaItem> m_item;
+    std::function<void()> m_unsubscribe;
     QTimer m_scaleToFitTimer;
     std::unordered_map<MediaType, Viewer *> m_viewers;
     QStackedLayout *m_layout;

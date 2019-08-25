@@ -8,11 +8,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt5Core)
-find_package(Qt5Gui)
-find_package(Qt5Widgets)
-find_package(Qt5Multimedia)
-find_package(Qt5MultimediaWidgets)
+find_package(SodiumCxx REQUIRED)
+find_package(Qt5 COMPONENTS Core Gui Widgets Multimedia MultimediaWidgets REQUIRED)
 
 set(QTC_UTILS_SOURCES
     "../3rdparty/qtc/progressindicator.cpp"
@@ -42,11 +39,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
 )
 
-target_link_libraries(${PROJECT_NAME} Qt5::Core)
-target_link_libraries(${PROJECT_NAME} Qt5::Gui)
-target_link_libraries(${PROJECT_NAME} Qt5::Widgets)
-target_link_libraries(${PROJECT_NAME} Qt5::Multimedia)
-target_link_libraries(${PROJECT_NAME} Qt5::MultimediaWidgets)
+target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Gui Qt5::Widgets
+    Qt5::Multimedia Qt5::MultimediaWidgets SodiumCxx)
 
 target_sources(${PROJECT_NAME} PRIVATE
     "../util/fileutil.cpp"
