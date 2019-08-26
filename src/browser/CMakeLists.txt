@@ -8,29 +8,29 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+find_package(Qt5 COMPONENTS Widgets Multimedia MultimediaWidgets REQUIRED)
 find_package(SodiumCxx REQUIRED)
-find_package(Qt5 COMPONENTS Core Gui Widgets Multimedia MultimediaWidgets REQUIRED)
 
 set(QTC_UTILS_SOURCES
-    "../3rdparty/qtc/progressindicator.cpp"
-    "../3rdparty/qtc/runextensions.cpp"
-    "../3rdparty/qtc/utils.qrc"
+    ../3rdparty/qtc/progressindicator.cpp
+    ../3rdparty/qtc/runextensions.cpp
+    ../3rdparty/qtc/utils.qrc
 )
 add_compile_definitions(QTCREATOR_UTILS_EXPORT=)
 
 add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
-   "app.cpp"
-   "browserwindow.cpp"
-   "directorytree.cpp"
-   "filmrollview.cpp"
-   "fullscreensplitter.cpp"
-   "imageview.cpp"
-   "main.cpp"
-   "mediadirectorymodel.cpp"
-   "thumbnailcreator.cpp"
+   app.cpp
+   browserwindow.cpp
+   directorytree.cpp
+   filmrollview.cpp
+   fullscreensplitter.cpp
+   imageview.cpp
+   main.cpp
+   mediadirectorymodel.cpp
+   thumbnailcreator.cpp
    ${QTC_UTILS_SOURCES}
 )
-include_directories("../3rdparty/")
+include_directories(../3rdparty/)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
@@ -40,18 +40,15 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 target_link_libraries(${PROJECT_NAME} Qt5::Core Qt5::Gui Qt5::Widgets
-    Qt5::Multimedia Qt5::MultimediaWidgets SodiumCxx)
+    Qt5::Multimedia Qt5::MultimediaWidgets Exiv2 SodiumCxx)
 
 target_sources(${PROJECT_NAME} PRIVATE
-    "../util/fileutil.cpp"
-    "../util/metadatautil.cpp"
+    ../util/fileutil.cpp
+    ../util/metadatautil.cpp
 )
 if(APPLE)
     target_sources(${PROJECT_NAME} PRIVATE
-        "../util/fileutil_mac.mm"
+        ../util/fileutil_mac.mm
     )
-    target_link_libraries(${PROJECT_NAME} "-framework Foundation" "-framework AppKit")
+    target_link_libraries(${PROJECT_NAME} ${FWFoundation} ${FWAppKit})
 endif(APPLE)
-
-target_link_libraries(${PROJECT_NAME} ${Exiv2_Library})
-include_directories(${Exiv2_IncludePath})
