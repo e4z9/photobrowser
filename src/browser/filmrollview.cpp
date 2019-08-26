@@ -2,71 +2,83 @@
 
 #include "fullscreensplitter.h"
 #include "imageview.h"
+#include "sqlistview.h"
 
 #include <QAbstractItemDelegate>
 #include <QEvent>
-#include <QListView>
 #include <QPainter>
 #include <QScrollBar>
 #include <QSplitter>
 #include <QVBoxLayout>
 
-class Fotoroll : public QListView
+using namespace sodium;
+
+class Fotoroll : public SQListView
 {
 public:
-    Fotoroll()
+    Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
+        : SQListView(sCurrentIndex)
+        , m_currentItem(std::nullopt)
     {
         setFlow(QListView::LeftToRight);
         setItemDelegate(&m_delegate);
+
+        m_currentItem = cCurrentIndex().map([this](boost::optional<int> i) -> OptionalMediaItem {
+            if (i) {
+                const auto value = model()->data(model()->index(*i, 0),
+                                                 int(MediaDirectoryModel::Role::Item));
+                if (value.canConvert<MediaItem>())
+                    return value.value<MediaItem>();
+            }
+            return {};
+        });
     }
 
     bool event(QEvent *ev) override
     {
         if (ev->type() == QEvent::Resize) {
-            m_ignoreSelection = true;
+            transaction t; // avoid updating cells for deselecting and selecting
             const auto selection = selectionModel()->selection();
             const auto current = selectionModel()->currentIndex();
             // force relayout since we want the thumbnails to resize
             reset();
             selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
             selectionModel()->setCurrentIndex(current, QItemSelectionModel::Current);
-            m_ignoreSelection = false;
         }
-        return QListView::event(ev);
+        return SQListView::event(ev);
     }
 
-    void setModel(QAbstractItemModel *m) override
-    {
-        if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model()))
-            disconnect(mediaModel, &MediaDirectoryModel::modelReset, this, nullptr);
-        QListView::setModel(m);
-        if (auto mediaModel = qobject_cast<MediaDirectoryModel *>(model())) {
-            connect(mediaModel, &MediaDirectoryModel::modelReset, this, [this] {
-                if (model()->rowCount() > 0) {
-                    selectionModel()->setCurrentIndex(model()->index(0, 0),
-                                                      QItemSelectionModel::SelectCurrent);
-                }
-            });
-        }
-    }
+    const cell<OptionalMediaItem> &currentItem() const { return m_currentItem; }
 
+private:
+    cell<OptionalMediaItem> m_currentItem;
     MediaItemDelegate m_delegate;
-    bool m_ignoreSelection = false;
 };
 
 static constexpr int MARGIN = 10;
 
 FilmRollView::FilmRollView(QWidget *parent)
     : QWidget(parent)
-    , m_itemSink(std::nullopt)
     , m_splitter(new FullscreenSplitter)
+    , m_fotoroll(new Fotoroll(m_sCurrentIndex))
 {
-    auto vLayout = new QVBoxLayout;
-    vLayout->setContentsMargins(0, 0, 0, 0);
-    setLayout(vLayout);
-
-    m_imageView = new ImageView(m_itemSink);
-    m_fotoroll = new Fotoroll;
+    // TODO pass on via FRP instead of signal
+    m_unsubscribe += m_fotoroll->currentItem().updates().defer().listen(
+        [this](const OptionalMediaItem &) { emit currentItemChanged(); });
+    // delay change of current item in imageview
+    const auto sStartSelectionTimer = m_fotoroll->currentItem().updates().map(
+        [](const auto &) { return unit(); });
+    m_selectionUpdate = std::make_unique<SQTimer>(sStartSelectionTimer);
+    const cell<OptionalMediaItem> currentItem = m_selectionUpdate->sTimeout()
+                                                    .snapshot(m_fotoroll->currentItem(),
+                                                              [](unit,
+                                                                 const OptionalMediaItem &item) {
+                                                                  return item;
+                                                              })
+                                                    .hold(std::nullopt);
+    m_imageView = new ImageView(currentItem);
+    m_selectionUpdate->setInterval(80);
+    m_selectionUpdate->setSingleShot(true);
 
     m_splitter->setOrientation(Qt::Vertical);
     m_splitter->setWidget(FullscreenSplitter::First, m_imageView);
@@ -75,38 +87,15 @@ FilmRollView::FilmRollView(QWidget *parent)
     m_splitter->setFullscreenChangedAction(
         [this](bool fullscreen) { m_imageView->setFullscreen(fullscreen); });
 
+    auto vLayout = new QVBoxLayout;
+    vLayout->setContentsMargins(0, 0, 0, 0);
+    setLayout(vLayout);
     layout()->addWidget(m_splitter);
-
-    m_selectionUpdate.setInterval(80);
-    m_selectionUpdate.setSingleShot(true);
-    connect(&m_selectionUpdate, &QTimer::timeout, this, [this] {
-        select(m_fotoroll->selectionModel()->currentIndex());
-    });
 }
 
 void FilmRollView::setModel(QAbstractItemModel *model)
 {
-    if (m_fotoroll->model())
-        disconnect(m_fotoroll->model(), nullptr, this, nullptr);
-    if (m_fotoroll->selectionModel())
-        disconnect(m_fotoroll->selectionModel(), nullptr, this, nullptr);
     m_fotoroll->setModel(model);
-    if (m_fotoroll->selectionModel()) {
-        connect(m_fotoroll->selectionModel(), &QItemSelectionModel::currentChanged, this, [this] {
-            if (!m_fotoroll->m_ignoreSelection) {
-                m_selectionUpdate.start();
-                emit currentItemChanged();
-            }
-        });
-    }
-    if (m_fotoroll->model()) {
-        connect(m_fotoroll->model(), &QAbstractItemModel::modelReset, this, [this] {
-            if (m_fotoroll->model()->rowCount() == 0) {
-                m_selectionUpdate.start();
-                emit currentItemChanged();
-            }
-        });
-    }
 }
 
 QAbstractItemModel *FilmRollView::model() const
@@ -141,20 +130,21 @@ void FilmRollView::scaleToFit()
 
 void FilmRollView::previous()
 {
-    const QModelIndex index = m_fotoroll->selectionModel()->currentIndex();
-    if (index.isValid() && index.row() > 0) {
-        m_fotoroll->selectionModel()->setCurrentIndex(index.siblingAtRow(index.row() - 1),
-                                                      QItemSelectionModel::SelectCurrent);
-    }
+    const auto currentIndex = m_fotoroll->cCurrentIndex().sample();
+    if (!currentIndex && m_fotoroll->model()->rowCount() > 0)
+        m_sCurrentIndex.send(0);
+    else if (currentIndex && *currentIndex > 0)
+        m_sCurrentIndex.send(*currentIndex - 1);
 }
 
 void FilmRollView::next()
 {
-    const QModelIndex index = m_fotoroll->selectionModel()->currentIndex();
-    if (index.isValid() && index.row() + 1 < m_fotoroll->model()->rowCount(index.parent())) {
-        m_fotoroll->selectionModel()->setCurrentIndex(index.siblingAtRow(index.row() + 1),
-                                                      QItemSelectionModel::SelectCurrent);
-    }
+    const auto currentIndex = m_fotoroll->cCurrentIndex().sample();
+    const int rowCount = m_fotoroll->model()->rowCount();
+    if (!currentIndex && rowCount > 0)
+        m_sCurrentIndex.send(0);
+    else if (currentIndex && *currentIndex < rowCount - 1)
+        m_sCurrentIndex.send(*currentIndex + 1);
 }
 
 QModelIndex FilmRollView::currentIndex() const
@@ -164,30 +154,12 @@ QModelIndex FilmRollView::currentIndex() const
 
 OptionalMediaItem FilmRollView::currentItem() const
 {
-    const auto index = m_fotoroll->currentIndex();
-    if (index.isValid()) {
-        const auto value = m_fotoroll->model()->data(index, int(MediaDirectoryModel::Role::Item));
-        if (value.canConvert<MediaItem>())
-            return value.value<MediaItem>();
-    }
-    return {};
+    return m_fotoroll->currentItem().sample();
 }
 
 void FilmRollView::setFullscreen(bool fullscreen)
 {
     m_splitter->setFullscreen(fullscreen);
-}
-
-void FilmRollView::select(const QModelIndex &index)
-{
-    if (!index.isValid())
-        m_itemSink.send(std::nullopt);
-    const auto value = m_fotoroll->model()->data(index, int(MediaDirectoryModel::Role::Item));
-    if (value.canConvert<MediaItem>()) {
-        m_itemSink.send(value.value<MediaItem>());
-    } else {
-        m_itemSink.send(std::nullopt);
-    }
 }
 
 static QSize thumbnailSize(const int viewHeight, const QSize dimensions)

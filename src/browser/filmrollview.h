@@ -2,11 +2,15 @@
 
 #include "mediadirectorymodel.h"
 
+#include "sqtimer.h"
+#include "tools.h"
+
 #include <QAbstractItemModel>
 #include <QListView>
 #include <QTimer>
 #include <QWidget>
 
+#include <memory>
 #include <optional.h>
 
 #include <sodium/sodium.h>
@@ -60,11 +64,10 @@ signals:
     void currentItemChanged();
 
 private:
-    void select(const QModelIndex &index);
-
-    sodium::cell_sink<OptionalMediaItem> m_itemSink;
+    sodium::stream_sink<boost::optional<int>> m_sCurrentIndex;
+    Unsubscribe m_unsubscribe;
     FullscreenSplitter *m_splitter;
     Fotoroll *m_fotoroll;
     ImageView *m_imageView;
-    QTimer m_selectionUpdate;
+    std::unique_ptr<SQTimer> m_selectionUpdate;
 };
