@@ -28,6 +28,7 @@ add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
    main.cpp
    mediadirectorymodel.cpp
    thumbnailcreator.cpp
+   tools.h
    ${QTC_UTILS_SOURCES}
 )
 include_directories(../3rdparty/)
