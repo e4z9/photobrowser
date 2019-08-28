@@ -2,6 +2,8 @@
 
 #include "mediadirectorymodel.h"
 
+#include "tools.h"
+
 #include <QTimer>
 #include <QWidget>
 
@@ -21,7 +23,6 @@ class ImageView : public QWidget
 {
 public:
     ImageView(const sodium::cell<OptionalMediaItem> &item);
-    ~ImageView() override;
 
     const sodium::cell<OptionalMediaItem> &item() const;
 
@@ -41,7 +42,7 @@ private:
     Viewer *currentViewer() const;
 
     sodium::cell<OptionalMediaItem> m_item;
-    std::function<void()> m_unsubscribe;
+    Unsubscribe m_unsubscribe;
     QTimer m_scaleToFitTimer;
     std::unordered_map<MediaType, Viewer *> m_viewers;
     QStackedLayout *m_layout;

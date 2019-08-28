@@ -5,6 +5,7 @@
 #include <QTimer>
 
 #include <functional>
+#include <vector>
 
 template<typename A>
 std::function<void(A)> ensureSameThread(QObject *guard, const std::function<void(A)> &action)
@@ -15,3 +16,13 @@ std::function<void(A)> ensureSameThread(QObject *guard, const std::function<void
         QTimer::singleShot(0, guard, [action, a] { action(a); });
     };
 }
+
+class Unsubscribe
+{
+public:
+    Unsubscribe &operator+=(const std::function<void()> &&unsub);
+    ~Unsubscribe();
+
+private:
+    std::vector<std::function<void()>> m_unsubs;
+};

@@ -46,7 +46,6 @@ class VideoViewer : public QGraphicsView, public Viewer
 {
 public:
     explicit VideoViewer(const cell<OptionalMediaItem> &video);
-    ~VideoViewer() override;
 
     void togglePlayVideo() override;
     void stepVideo(qint64 step) override;
@@ -61,7 +60,7 @@ private:
     void setItem(const OptionalMediaItem &item);
 
     cell<OptionalMediaItem> m_video;
-    std::function<void()> m_unsubscribe;
+    Unsubscribe m_unsubscribe;
     QGraphicsItem *m_item = nullptr;
     QMediaPlayer m_player;
     bool m_scalingToFit = false;
@@ -91,16 +90,11 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video)
                 }
             });
 
-    m_unsubscribe = m_video.listen(
+    m_unsubscribe += m_video.listen(
         ensureSameThread<OptionalMediaItem>(this,
                                             std::bind(&VideoViewer::setItem,
                                                       this,
                                                       std::placeholders::_1)));
-}
-
-VideoViewer::~VideoViewer()
-{
-    m_unsubscribe();
 }
 
 void VideoViewer::setItem(const OptionalMediaItem &item)
@@ -186,7 +180,7 @@ private:
     void setItem(const MediaItem &item);
 
     cell<OptionalMediaItem> m_image;
-    std::function<void()> m_unsubscribe;
+    Unsubscribe m_unsubscribe;
     QGraphicsItem *m_item = nullptr;
     QFuture<QImage> m_loadingFuture;
     bool m_scalingToFit = false;
@@ -202,7 +196,7 @@ PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image)
     setRenderHint(QPainter::Antialiasing);
     setFocusPolicy(Qt::NoFocus);
 
-    m_unsubscribe = image.listen(
+    m_unsubscribe += image.listen(
         ensureSameThread<OptionalMediaItem>(this, [this](const OptionalMediaItem &i) {
             if (i)
                 setItem(*i);
@@ -294,7 +288,7 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item)
                             return img ? pictureViewer : vid ? videoViewer : noViewer;
                         });
 
-    m_unsubscribe = viewerWidget.listen(
+    m_unsubscribe += viewerWidget.listen(
         ensureSameThread<QWidget *>(this, [this](QWidget *w) { m_layout->setCurrentWidget(w); }));
 
     m_layout->setContentsMargins(0, 0, 0, 0);
@@ -311,11 +305,6 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item)
     m_scaleToFitTimer.setSingleShot(true);
     m_scaleToFitTimer.setInterval(50);
     connect(&m_scaleToFitTimer, &QTimer::timeout, this, &ImageView::scaleToFit);
-}
-
-ImageView::~ImageView()
-{
-    m_unsubscribe();
 }
 
 void ImageView::togglePlayVideo()
