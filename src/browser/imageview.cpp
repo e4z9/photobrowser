@@ -92,7 +92,7 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video)
             });
 
     m_unsubscribe = m_video.listen(
-        ensureMainThread<OptionalMediaItem>(this,
+        ensureSameThread<OptionalMediaItem>(this,
                                             std::bind(&VideoViewer::setItem,
                                                       this,
                                                       std::placeholders::_1)));
@@ -203,7 +203,7 @@ PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image)
     setFocusPolicy(Qt::NoFocus);
 
     m_unsubscribe = image.listen(
-        ensureMainThread<OptionalMediaItem>(this, [this](const OptionalMediaItem &i) {
+        ensureSameThread<OptionalMediaItem>(this, [this](const OptionalMediaItem &i) {
             if (i)
                 setItem(*i);
             else
@@ -295,7 +295,7 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item)
                         });
 
     m_unsubscribe = viewerWidget.listen(
-        ensureMainThread<QWidget *>(this, [this](QWidget *w) { m_layout->setCurrentWidget(w); }));
+        ensureSameThread<QWidget *>(this, [this](QWidget *w) { m_layout->setCurrentWidget(w); }));
 
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);
