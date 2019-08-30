@@ -37,6 +37,10 @@ const sodium::cell<boost::optional<int>> &SQListView::cCurrentIndex() const
 void SQListView::currentChanged(const QModelIndex &current, const QModelIndex &previous)
 {
     Q_UNUSED(previous)
+    // for whatever reason, if there is no current item and the view gets focus,
+    // the current item is set to the first, but the selection is not set, nor visible
+    if (!previous.isValid() && current.isValid() && !selectionModel()->isSelected(current))
+        selectionModel()->select(current, QItemSelectionModel::Select);
     updateCurrent(current);
 }
 
