@@ -93,8 +93,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     const cell<bool> anyItemSelected = imageView->currentItem().map(
         [](const OptionalMediaItem &i) { return bool(i); });
     const auto snapshotItemFilePath = [imageView](const stream<unit> &s) {
-        return s
-            .snapshot(imageView->currentItem(), [](unit, const OptionalMediaItem &i) { return i; })
+        return s.snapshot(imageView->currentItem())
             .filter(&OptionalMediaItem::operator bool)
             .map([](const OptionalMediaItem &i) { return i->filePath; });
     };
@@ -114,8 +113,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
     const stream<int> sMoveToTrash = moveToTrash->sTriggered()
-                                         .snapshot(imageView->currentIndex(),
-                                                   [](unit, const auto &i) { return i; })
+                                         .snapshot(imageView->currentIndex())
                                          .filter(&boost::optional<int>::operator bool)
                                          .map([](const boost::optional<int> &i) { return *i; });
     m_unsubscribe += sMoveToTrash.listen(ensureSameThread<int>(this, [this](const int &i) {

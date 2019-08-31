@@ -69,13 +69,8 @@ FilmRollView::FilmRollView(QWidget *parent)
     const auto sStartSelectionTimer = m_fotoroll->currentItem().updates().map(
         [](const auto &) { return unit(); });
     m_selectionUpdate = std::make_unique<SQTimer>(sStartSelectionTimer);
-    const cell<OptionalMediaItem> currentItem = m_selectionUpdate->sTimeout()
-                                                    .snapshot(m_fotoroll->currentItem(),
-                                                              [](unit,
-                                                                 const OptionalMediaItem &item) {
-                                                                  return item;
-                                                              })
-                                                    .hold(std::nullopt);
+    const cell<OptionalMediaItem> currentItem
+        = m_selectionUpdate->sTimeout().snapshot(m_fotoroll->currentItem()).hold(std::nullopt);
     m_imageView = new ImageView(currentItem);
     m_selectionUpdate->setInterval(80);
     m_selectionUpdate->setSingleShot(true);
