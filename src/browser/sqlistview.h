@@ -20,8 +20,9 @@ protected:
 
 private:
     void checkUpdateCurrent();
-    void updateCurrent(const QModelIndex &current);
 
-    sodium::cell_sink<boost::optional<int>> m_currentIndex;
+    sodium::cell<boost::optional<int>> m_currentIndex;
+    sodium::stream_sink<boost::optional<int>> m_sUserCurrentIndex;
     Unsubscribe m_unsubscribe;
+    bool blockChange = false;
 };
