@@ -378,3 +378,10 @@ QString sizeToString(const qint64 size)
         return MediaDirectoryModel::tr("%1 KB").arg(QString::number(size / 1000));
     return MediaDirectoryModel::tr("%1 B").arg(QString::number(size));
 }
+
+QString MediaItem::windowTitle() const
+{
+    const QDateTime dt = metaData.created ? *(metaData.created) : created;
+    return QCoreApplication::translate("MediaItem", "%1 - %2")
+        .arg(fileName, dt.toString(Qt::SystemLocaleLongDate));
+}

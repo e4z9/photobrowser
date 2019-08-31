@@ -31,7 +31,6 @@ public:
 
 private:
     void adaptProgressIndicator();
-    void updateWindowTitle(const std::optional<MediaItem> &item);
 
     FullscreenSplitter *m_splitter = nullptr;
     DirectoryTree *m_fileTree = nullptr;

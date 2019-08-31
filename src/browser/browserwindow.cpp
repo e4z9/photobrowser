@@ -81,6 +81,12 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto menubar = new QMenuBar(this);
     setMenuBar(menubar);
 
+    // window title
+    const cell<QString> title = imageView->currentItem().map(
+        [](const OptionalMediaItem &i) { return i ? i->windowTitle() : QString(); });
+    m_unsubscribe += title.listen(
+        ensureSameThread<QString>(this, [this](const QString &s) { setWindowTitle(s); }));
+
     // file actions
     auto fileMenu = menubar->addMenu(tr("File"));
 
@@ -210,13 +216,12 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     connect(imageView,
             &FilmRollView::currentItemChanged,
             this,
-            [this, imageView, playStop, stepForward, stepBackward] {
+            [imageView, playStop, stepForward, stepBackward] {
                 const auto currentItem = imageView->_currentItem();
                 const bool enabled = (currentItem && currentItem->type == MediaType::Video);
                 playStop->setEnabled(enabled);
                 stepForward->setEnabled(enabled);
                 stepBackward->setEnabled(enabled);
-                updateWindowTitle(currentItem);
             });
 
     window()->installEventFilter(this);
@@ -300,14 +305,4 @@ void BrowserWindow::adaptProgressIndicator()
               pp->height() - sh.height() - st->pixelMetric(QStyle::PM_LayoutBottomMargin),
               sh.width(),
               sh.height()));
-}
-
-void BrowserWindow::updateWindowTitle(const std::optional<MediaItem> &item)
-{
-    if (!item) {
-        setWindowTitle({});
-    } else {
-        const QDateTime dt = item->metaData.created ? *(item->metaData.created) : item->created;
-        setWindowTitle(tr("%1 - %2").arg(item->fileName, dt.toString(Qt::SystemLocaleLongDate)));
-    }
 }

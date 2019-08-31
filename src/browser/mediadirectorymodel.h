@@ -23,6 +23,8 @@ public:
     std::optional<QPixmap> thumbnail;
     Util::MetaData metaData;
     MediaType type;
+
+    QString windowTitle() const;
 };
 
 QString durationToString(const qint64 durationMs);
