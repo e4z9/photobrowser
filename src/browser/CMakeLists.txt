@@ -19,6 +19,7 @@ set(QTC_UTILS_SOURCES
 add_compile_definitions(QTCREATOR_UTILS_EXPORT=)
 
 add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
+    ${QTC_UTILS_SOURCES}
     app.cpp
     browserwindow.cpp
     directorytree.cpp
@@ -27,12 +28,12 @@ add_executable(${PROJECT_NAME} WIN32 MACOSX_BUNDLE
     imageview.cpp
     main.cpp
     mediadirectorymodel.cpp
+    sqaction.cpp sqaction.h
     sqlistview.cpp sqlistview.h
     sqtimer.cpp sqtimer.h
     thumbnailcreator.cpp
     tools.cpp
     tools.h
-    ${QTC_UTILS_SOURCES}
 )
 include_directories(../3rdparty/)
 

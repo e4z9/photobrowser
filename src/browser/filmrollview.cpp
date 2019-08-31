@@ -147,14 +147,19 @@ void FilmRollView::next()
         m_sCurrentIndex.send(*currentIndex + 1);
 }
 
-QModelIndex FilmRollView::currentIndex() const
+const sodium::cell<boost::optional<int>> &FilmRollView::currentIndex() const
 {
-    return m_fotoroll->currentIndex();
+    return m_fotoroll->cCurrentIndex();
 }
 
-OptionalMediaItem FilmRollView::currentItem() const
+OptionalMediaItem FilmRollView::_currentItem() const
 {
     return m_fotoroll->currentItem().sample();
+}
+
+const sodium::cell<OptionalMediaItem> &FilmRollView::currentItem() const
+{
+    return m_fotoroll->currentItem();
 }
 
 void FilmRollView::setFullscreen(bool fullscreen)

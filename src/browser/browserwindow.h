@@ -2,6 +2,8 @@
 
 #include "mediadirectorymodel.h"
 
+#include "tools.h"
+
 #include <QMainWindow>
 #include <QSettings>
 #include <QTimer>
@@ -41,4 +43,5 @@ private:
     Utils::ProgressIndicator *m_progressIndicator = nullptr;
     QTimer m_progressTimer;
     MediaDirectoryModel m_model;
+    Unsubscribe m_unsubscribe;
 };

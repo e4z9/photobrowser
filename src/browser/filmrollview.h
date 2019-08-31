@@ -55,8 +55,9 @@ public:
     void previous();
     void next();
 
-    QModelIndex currentIndex() const;
-    OptionalMediaItem currentItem() const;
+    const sodium::cell<boost::optional<int>> &currentIndex() const;
+    OptionalMediaItem _currentItem() const;
+    const sodium::cell<OptionalMediaItem> &currentItem() const;
 
     void setFullscreen(bool fullscreen);
 

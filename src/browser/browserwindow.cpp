@@ -3,6 +3,7 @@
 #include "directorytree.h"
 #include "filmrollview.h"
 #include "fullscreensplitter.h"
+#include "sqaction.h"
 
 #include "../util/fileutil.h"
 
@@ -15,6 +16,10 @@
 #include <QMenuBar>
 #include <QUrl>
 #include <QVBoxLayout>
+
+#include <sodium/sodium.h>
+
+using namespace sodium;
 
 BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -79,38 +84,42 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     // file actions
     auto fileMenu = menubar->addMenu(tr("File"));
 
-    auto revealInFinder = fileMenu->addAction(tr("Reveal in Finder"));
+    const cell<bool> anyItemSelected = imageView->currentItem().map(
+        [](const OptionalMediaItem &i) { return bool(i); });
+    const auto snapshotItemFilePath = [imageView](const stream<unit> &s) {
+        return s
+            .snapshot(imageView->currentItem(), [](unit, const OptionalMediaItem &i) { return i; })
+            .filter(&OptionalMediaItem::operator bool)
+            .map([](const OptionalMediaItem &i) { return i->filePath; });
+    };
+
+    auto revealInFinder = new SQAction(tr("Reveal in Finder"), anyItemSelected, fileMenu);
     revealInFinder->setShortcut({"o"});
-    connect(revealInFinder, &QAction::triggered, this, [this, imageView] {
-        const auto item = imageView->currentItem();
-        if (item)
-            Util::revealInFinder(item->filePath);
-    });
+    const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->sTriggered());
+    m_unsubscribe += sReveal.listen(ensureSameThread<QString>(this, &Util::revealInFinder));
 
-    auto openInDefaultEditor = fileMenu->addAction(tr("Open in Default Editor"));
+    auto openInDefaultEditor = new SQAction(tr("Open in Default Editor"), anyItemSelected, fileMenu);
     openInDefaultEditor->setShortcut({"ctrl+o"});
-    connect(openInDefaultEditor, &QAction::triggered, this, [this, imageView] {
-        const auto item = imageView->currentItem();
-        if (item)
-            QDesktopServices::openUrl(QUrl::fromLocalFile(item->filePath));
-    });
+    const stream<QString> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered());
+    m_unsubscribe += sOpenEditor.listen(ensureSameThread<QString>(this, [](const QString &fp) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(fp));
+    }));
 
-    fileMenu->addSeparator();
-
-    auto moveToTrash = fileMenu->addAction(tr("Move to Trash"));
+    auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
-    connect(moveToTrash, &QAction::triggered, this, [this, imageView] {
-        m_model.moveItemAtIndexToTrash(imageView->currentIndex());
-    });
+    const stream<int> sMoveToTrash = moveToTrash->sTriggered()
+                                         .snapshot(imageView->currentIndex(),
+                                                   [](unit, const auto &i) { return i; })
+                                         .filter(&boost::optional<int>::operator bool)
+                                         .map([](const boost::optional<int> &i) { return *i; });
+    m_unsubscribe += sMoveToTrash.listen(ensureSameThread<int>(this, [this](const int &i) {
+        m_model.moveItemAtIndexToTrash(m_model.index(i, 0));
+    }));
 
-    connect(imageView,
-            &FilmRollView::currentItemChanged,
-            this,
-            [imageView, moveToTrash, revealInFinder] {
-                const bool hasItem = imageView->currentItem().has_value();
-                revealInFinder->setEnabled(hasItem);
-                moveToTrash->setEnabled(hasItem);
-            });
+    fileMenu->addAction(revealInFinder);
+    fileMenu->addAction(openInDefaultEditor);
+    fileMenu->addSeparator();
+    fileMenu->addAction(moveToTrash);
 
     // view actions
     auto viewMenu = menubar->addMenu(tr("Show")); // using "view" adds stupid other actions automatically
@@ -202,7 +211,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
             &FilmRollView::currentItemChanged,
             this,
             [this, imageView, playStop, stepForward, stepBackward] {
-                const auto currentItem = imageView->currentItem();
+                const auto currentItem = imageView->_currentItem();
                 const bool enabled = (currentItem && currentItem->type == MediaType::Video);
                 playStop->setEnabled(enabled);
                 stepForward->setEnabled(enabled);
