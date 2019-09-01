@@ -24,14 +24,13 @@ class ImageView : public QWidget
 public:
     ImageView(const sodium::cell<OptionalMediaItem> &item,
               const sodium::stream<sodium::unit> &sTogglePlayVideo,
-              const sodium::stream<qint64> &sStepVideo);
+              const sodium::stream<qint64> &sStepVideo,
+              const sodium::stream<bool> &sFullscreen);
 
     const sodium::cell<OptionalMediaItem> &item() const;
 
     void scaleToFit();
     void scale(qreal s);
-
-    void setFullscreen(bool fullscreen);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

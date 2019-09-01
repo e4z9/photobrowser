@@ -33,8 +33,6 @@ public:
     virtual void scaleToFit() = 0;
     virtual bool isScalingToFit() const = 0;
     virtual void scale(qreal s) = 0;
-
-    virtual void setFullscreen(bool fullscreen) = 0;
 };
 
 class VideoViewer : public QGraphicsView, public Viewer
@@ -42,7 +40,8 @@ class VideoViewer : public QGraphicsView, public Viewer
 public:
     VideoViewer(const cell<OptionalMediaItem> &video,
                 const stream<unit> &sTogglePlayVideo,
-                const stream<qint64> &sStepVideo);
+                const stream<qint64> &sStepVideo,
+                const stream<bool> &sFullscreen);
 
     void togglePlayVideo();
     void stepVideo(qint64 step);
@@ -50,8 +49,6 @@ public:
     void scaleToFit() override;
     bool isScalingToFit() const override;
     void scale(qreal s) override;
-
-    void setFullscreen(bool fullscreen) override;
 
 private:
     void setItem(const OptionalMediaItem &item);
@@ -66,7 +63,8 @@ private:
 
 VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
                          const stream<unit> &sTogglePlayVideo,
-                         const stream<qint64> &sStepVideo)
+                         const stream<qint64> &sStepVideo,
+                         const stream<bool> &sFullscreen)
     : m_video(video)
     , m_player(nullptr, QMediaPlayer::VideoSurface)
 {
@@ -94,6 +92,8 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
     m_unsubscribe += sTogglePlayVideo.listen(
         ensureSameThread<unit>(this, [this](unit) { togglePlayVideo(); }));
     m_unsubscribe += sStepVideo.listen(ensureSameThread<qint64>(this, &VideoViewer::stepVideo));
+    m_unsubscribe += sFullscreen.map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
+                         .listen(ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape));
 }
 
 void VideoViewer::setItem(const OptionalMediaItem &item)
@@ -155,21 +155,14 @@ void VideoViewer::scale(qreal s)
     QGraphicsView::scale(s, s);
 }
 
-void VideoViewer::setFullscreen(bool fullscreen)
-{
-    setFrameShape(fullscreen ? QFrame::NoFrame : QFrame::Panel);
-}
-
 class PictureViewer : public QGraphicsView, public Viewer
 {
 public:
-    explicit PictureViewer(const cell<OptionalMediaItem> &image);
+    explicit PictureViewer(const cell<OptionalMediaItem> &image, const stream<bool> &sFullscreen);
 
     void scaleToFit() override;
     bool isScalingToFit() const override;
     void scale(qreal s) override;
-
-    void setFullscreen(bool fullscreen) override;
 
 private:
     void clear();
@@ -182,7 +175,7 @@ private:
     bool m_scalingToFit = false;
 };
 
-PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image)
+PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image, const stream<bool> &sFullscreen)
     : m_image(image)
 {
     setScene(new QGraphicsScene(this));
@@ -199,6 +192,8 @@ PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image)
             else
                 clear();
         }));
+    m_unsubscribe += sFullscreen.map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
+                         .listen(ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape));
 }
 
 void PictureViewer::clear()
@@ -244,11 +239,6 @@ void PictureViewer::scale(qreal s)
     QGraphicsView::scale(s, s);
 }
 
-void PictureViewer::setFullscreen(bool fullscreen)
-{
-    setFrameShape(fullscreen ? QFrame::NoFrame : QFrame::Panel);
-}
-
 static std::function<OptionalMediaItem(OptionalMediaItem)> itemIfOfType(MediaType type)
 {
     return [type](const OptionalMediaItem &i) { return i && i->type == type ? i : std::nullopt; };
@@ -256,7 +246,8 @@ static std::function<OptionalMediaItem(OptionalMediaItem)> itemIfOfType(MediaTyp
 
 ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item,
                      const stream<unit> &sTogglePlayVideo,
-                     const sodium::stream<qint64> &sStepVideo)
+                     const sodium::stream<qint64> &sStepVideo,
+                     const sodium::stream<bool> &sFullscreen)
     : m_item(item)
     , m_layout(new QStackedLayout)
 {
@@ -265,11 +256,12 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item,
     const cell<OptionalMediaItem> optVideo = item.map(itemIfOfType(MediaType::Video));
     const cell<bool> hasVideo = optVideo.map(&isMediaItem);
 
-    auto pictureViewer = new PictureViewer(optImage);
+    auto pictureViewer = new PictureViewer(optImage, sFullscreen);
 
     auto videoViewer = new VideoViewer(optVideo,
                                        sTogglePlayVideo.gate(hasVideo),
-                                       sStepVideo.gate(hasVideo));
+                                       sStepVideo.gate(hasVideo),
+                                       sFullscreen);
 
     auto noViewer = new QWidget;
     m_layout->addWidget(pictureViewer);
@@ -284,6 +276,11 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item,
 
     m_unsubscribe += viewerWidget.listen(
         ensureSameThread<QWidget *>(m_layout, &QStackedLayout::setCurrentWidget));
+    m_unsubscribe += sFullscreen.listen(ensureSameThread<bool>(this, [this](bool b) {
+        auto p = palette();
+        p.setColor(QPalette::Base, b ? Qt::black : QGuiApplication::palette().color(QPalette::Base));
+        setPalette(p);
+    }));
 
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);
@@ -311,16 +308,6 @@ void ImageView::scale(qreal s)
 {
     if (Viewer *viewer = currentViewer())
         viewer->scale(s);
-}
-
-void ImageView::setFullscreen(bool fullscreen)
-{
-    auto p = palette();
-    p.setColor(QPalette::Base,
-               fullscreen ? Qt::black : QGuiApplication::palette().color(QPalette::Base));
-    setPalette(p);
-    for (auto viewer : m_viewers)
-        viewer.second->setFullscreen(fullscreen);
 }
 
 bool ImageView::eventFilter(QObject *watched, QEvent *event)

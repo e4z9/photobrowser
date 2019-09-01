@@ -1,6 +1,10 @@
 #pragma once
 
+#include "tools.h"
+
 #include <QStackedWidget>
+
+#include <sodium/sodium.h>
 
 QT_BEGIN_NAMESPACE
 class QSplitter;
@@ -11,22 +15,20 @@ class FullscreenSplitter : public QStackedWidget
 public:
     enum Index { First, Second };
 
-    FullscreenSplitter(QWidget *parent = nullptr);
+    FullscreenSplitter(const sodium::stream<bool> &sFullscreen);
 
     void setOrientation(Qt::Orientation orientation);
     void setWidget(Index index, QWidget *widget);
 
     void setFullscreenIndex(Index index);
-    void setFullscreen(bool fullscreen);
-
-    void setFullscreenChangedAction(std::function<void(bool)> action);
 
 private:
+    void setFullscreen(bool fullscreen);
     QSplitter *m_splitter;
     QWidget *m_first;
     QWidget *m_second;
     QWidget *m_fullscreen;
-    std::function<void(bool)> m_fullscreenChangedAction;
+    Unsubscribe m_unsubscribe;
     int m_fullscreenIndex = 0;
     bool m_isFullscreen = false;
 };

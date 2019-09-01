@@ -8,6 +8,8 @@
 #include <QSettings>
 #include <QTimer>
 
+#include <sodium/sodium.h>
+
 QT_BEGIN_NAMESPACE
 class QCheckBox;
 QT_END_NAMESPACE
@@ -32,13 +34,13 @@ public:
 private:
     void adaptProgressIndicator();
 
+    sodium::stream_sink<bool> m_sFullscreen;
     FullscreenSplitter *m_splitter = nullptr;
     DirectoryTree *m_fileTree = nullptr;
     QCheckBox *m_recursive = nullptr;
     QAction *m_sortExif = nullptr;
     QAction *m_sortFileName = nullptr;
     QAction *m_sortRandom = nullptr;
-    QAction *m_toggleFullscreen = nullptr;
     Utils::ProgressIndicator *m_progressIndicator = nullptr;
     QTimer m_progressTimer;
     MediaDirectoryModel m_model;

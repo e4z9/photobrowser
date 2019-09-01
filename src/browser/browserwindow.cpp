@@ -23,20 +23,18 @@ using namespace sodium;
 
 BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
-    , m_splitter(new FullscreenSplitter)
+    , m_splitter(new FullscreenSplitter(m_sFullscreen))
     , m_fileTree(new DirectoryTree)
     , m_recursive(new QCheckBox(tr("Include Subfolders")))
 {
     setCentralWidget(m_splitter);
-
     m_splitter->setOrientation(Qt::Horizontal);
+
     transaction t; // ensure single transaction
     stream_loop<unit> sTogglePlayVideo;
     stream_loop<qint64> sStepVideo;
-    auto imageView = new FilmRollView(sTogglePlayVideo, sStepVideo);
+    auto imageView = new FilmRollView(sTogglePlayVideo, sStepVideo, m_sFullscreen);
     imageView->setModel(&m_model);
-    m_splitter->setFullscreenChangedAction(
-        [imageView](bool fullscreen) { imageView->setFullscreen(fullscreen); });
 
     auto leftWidget = new QWidget;
     auto leftLayout = new QVBoxLayout;
@@ -182,15 +180,22 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     viewMenu->addSeparator();
 
-    m_toggleFullscreen = viewMenu->addAction(tr("Enter Full Screen"));
-    m_toggleFullscreen->setMenuRole(QAction::NoRole);
-    m_toggleFullscreen->setShortcut({"Meta+Ctrl+F"});
-    connect(m_toggleFullscreen, &QAction::triggered, this, [this] {
+    const cell<bool> fullscreen = m_sFullscreen.hold(false);
+    const cell<QString> fullscreenText = fullscreen.map([](bool b) {
+        return b ? QObject::tr("Exit Full Screen") : QObject::tr("Enter Full Screen");
+    });
+    auto toggleFullscreen = new SQAction(fullscreenText, viewMenu);
+    toggleFullscreen->setMenuRole(QAction::NoRole);
+    toggleFullscreen->setShortcut({"Meta+Ctrl+F"});
+    // event filter will send new value to m_sFullscreen, so do post
+    toggleFullscreen->sTriggered().listen(post<unit>(this, [this](unit) {
         if (window()->isFullScreen())
             window()->setWindowState(window()->windowState() & ~Qt::WindowFullScreen);
         else
             window()->setWindowState(window()->windowState() | Qt::WindowFullScreen);
-    });
+    }));
+
+    viewMenu->addAction(toggleFullscreen);
 
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
@@ -276,12 +281,7 @@ bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_progressIndicator->parentWidget() && event->type() == QEvent::Resize) {
         adaptProgressIndicator();
     } else if (watched == window() && event->type() == QEvent::WindowStateChange) {
-        if (window()->isFullScreen()) {
-            m_toggleFullscreen->setText(tr("Exit Full Screen"));
-        } else {
-            m_toggleFullscreen->setText(tr("Enter Full Screen"));
-        }
-        m_splitter->setFullscreen(isFullScreen());
+        m_sFullscreen.send(isFullScreen());
     }
     return QWidget::eventFilter(watched, event);
 }

@@ -3,9 +3,8 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 
-FullscreenSplitter::FullscreenSplitter(QWidget *parent)
-    : QStackedWidget(parent)
-    , m_splitter(new QSplitter)
+FullscreenSplitter::FullscreenSplitter(const sodium::stream<bool> &sFullscreen)
+    : m_splitter(new QSplitter)
     , m_first(new QWidget)
     , m_second(new QWidget)
     , m_fullscreen(new QWidget)
@@ -20,6 +19,9 @@ FullscreenSplitter::FullscreenSplitter(QWidget *parent)
     m_splitter->addWidget(m_second);
     addWidget(m_splitter);
     addWidget(m_fullscreen);
+
+    m_unsubscribe += sFullscreen.listen(
+        ensureSameThread<bool>(this, &FullscreenSplitter::setFullscreen));
 }
 
 void FullscreenSplitter::setOrientation(Qt::Orientation orientation)
@@ -54,11 +56,4 @@ void FullscreenSplitter::setFullscreen(bool fullscreen)
             ->addWidget(m_fullscreen->layout()->itemAt(0)->widget());
         setCurrentIndex(0);
     }
-    if (m_fullscreenChangedAction)
-        m_fullscreenChangedAction(m_isFullscreen);
-}
-
-void FullscreenSplitter::setFullscreenChangedAction(std::function<void(bool)> action)
-{
-    m_fullscreenChangedAction = action;
 }

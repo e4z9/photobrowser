@@ -40,7 +40,8 @@ class FilmRollView : public QWidget
 {
 public:
     FilmRollView(const sodium::stream<sodium::unit> &sTogglePlayVideo,
-                 const sodium::stream<qint64> &sStepVideo);
+                 const sodium::stream<qint64> &sStepVideo,
+                 const sodium::stream<bool> &sFullscreen);
 
     void setModel(QAbstractItemModel *model);
     QAbstractItemModel *model() const;
@@ -51,8 +52,6 @@ public:
 
     void previous();
     void next();
-
-    void setFullscreen(bool fullscreen);
 
     const sodium::cell<boost::optional<int>> &currentIndex() const;
     const sodium::cell<OptionalMediaItem> &currentItem() const;

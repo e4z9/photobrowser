@@ -58,8 +58,9 @@ private:
 static constexpr int MARGIN = 10;
 
 FilmRollView::FilmRollView(const stream<unit> &sTogglePlayVideo,
-                           const sodium::stream<qint64> &sStepVideo)
-    : m_splitter(new FullscreenSplitter)
+                           const sodium::stream<qint64> &sStepVideo,
+                           const sodium::stream<bool> &sFullscreen)
+    : m_splitter(new FullscreenSplitter(sFullscreen))
     , m_fotoroll(new Fotoroll(m_sCurrentIndex))
 {
     // delay change of current item in imageview
@@ -71,14 +72,12 @@ FilmRollView::FilmRollView(const stream<unit> &sTogglePlayVideo,
     m_selectionUpdate->setInterval(80);
     m_selectionUpdate->setSingleShot(true);
 
-    m_imageView = new ImageView(currentItem, sTogglePlayVideo, sStepVideo);
+    m_imageView = new ImageView(currentItem, sTogglePlayVideo, sStepVideo, sFullscreen);
 
     m_splitter->setOrientation(Qt::Vertical);
     m_splitter->setWidget(FullscreenSplitter::First, m_imageView);
     m_splitter->setWidget(FullscreenSplitter::Second, m_fotoroll);
     m_splitter->setFullscreenIndex(FullscreenSplitter::First);
-    m_splitter->setFullscreenChangedAction(
-        [this](bool fullscreen) { m_imageView->setFullscreen(fullscreen); });
 
     auto vLayout = new QVBoxLayout;
     vLayout->setContentsMargins(0, 0, 0, 0);
@@ -138,11 +137,6 @@ const sodium::cell<boost::optional<int>> &FilmRollView::currentIndex() const
 const sodium::cell<OptionalMediaItem> &FilmRollView::currentItem() const
 {
     return m_fotoroll->currentItem();
-}
-
-void FilmRollView::setFullscreen(bool fullscreen)
-{
-    m_splitter->setFullscreen(fullscreen);
 }
 
 static QSize thumbnailSize(const int viewHeight, const QSize dimensions)
