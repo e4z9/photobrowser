@@ -92,8 +92,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     // file actions
     auto fileMenu = menubar->addMenu(tr("File"));
 
-    const cell<bool> anyItemSelected = imageView->currentItem().map(
-        [](const OptionalMediaItem &i) { return bool(i); });
+    const cell<bool> anyItemSelected = imageView->currentItem().map(&isMediaItem);
     const cell<bool> videoItemSelected = imageView->currentItem().map(
         [](const OptionalMediaItem &i) { return i && i->type == MediaType::Video; });
     const auto snapshotItemFilePath = [imageView](const stream<unit> &s) {

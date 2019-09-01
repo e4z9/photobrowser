@@ -27,13 +27,13 @@ public:
     QString windowTitle() const;
 };
 
-QString durationToString(const qint64 durationMs);
-QString sizeToString(const qint64 size);
-
 using MediaItems = std::vector<MediaItem>;
 using OptionalMediaItem = std::optional<MediaItem>;
-
+bool isMediaItem(const OptionalMediaItem &item);
 Q_DECLARE_METATYPE(MediaItem)
+
+QString durationToString(const qint64 durationMs);
+QString sizeToString(const qint64 size);
 
 class MediaDirectoryModel : public QAbstractItemModel
 {

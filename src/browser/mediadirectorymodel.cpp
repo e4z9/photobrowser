@@ -385,3 +385,8 @@ QString MediaItem::windowTitle() const
     return QCoreApplication::translate("MediaItem", "%1 - %2")
         .arg(fileName, dt.toString(Qt::SystemLocaleLongDate));
 }
+
+bool isMediaItem(const OptionalMediaItem &item)
+{
+    return bool(item);
+}

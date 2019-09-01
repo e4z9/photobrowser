@@ -267,7 +267,7 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item,
     transaction trans;
     const cell<OptionalMediaItem> optImage = item.map(itemIfOfType(MediaType::Image));
     const cell<OptionalMediaItem> optVideo = item.map(itemIfOfType(MediaType::Video));
-    const cell<bool> hasVideo = optVideo.map([](const OptionalMediaItem &i) { return bool(i); });
+    const cell<bool> hasVideo = optVideo.map(&isMediaItem);
 
     auto pictureViewer = new PictureViewer(optImage);
 
