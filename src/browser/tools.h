@@ -13,7 +13,8 @@ std::function<void(A)> ensureSameThread(QObject *guard, const std::function<void
     return [guard, action](const A &a) -> void {
         if (guard->thread() == QThread::currentThread())
             action(a);
-        QTimer::singleShot(0, guard, [action, a] { action(a); });
+        else
+            QTimer::singleShot(0, guard, [action, a] { action(a); });
     };
 }
 
