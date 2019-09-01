@@ -28,10 +28,7 @@ static QImage imageForFilePath(const QString &filePath, Util::Orientation orient
 class Viewer
 {
 public:
-    virtual ~Viewer();
-
-    virtual void togglePlayVideo() = 0;
-    virtual void stepVideo(qint64 step) = 0;
+    virtual ~Viewer() = default;
 
     virtual void scaleToFit() = 0;
     virtual bool isScalingToFit() const = 0;
@@ -40,15 +37,15 @@ public:
     virtual void setFullscreen(bool fullscreen) = 0;
 };
 
-Viewer::~Viewer() {}
-
 class VideoViewer : public QGraphicsView, public Viewer
 {
 public:
-    explicit VideoViewer(const cell<OptionalMediaItem> &video);
+    VideoViewer(const cell<OptionalMediaItem> &video,
+                const stream<unit> &sTogglePlayVideo,
+                const stream<qint64> &sStepVideo);
 
-    void togglePlayVideo() override;
-    void stepVideo(qint64 step) override;
+    void togglePlayVideo();
+    void stepVideo(qint64 step);
 
     void scaleToFit() override;
     bool isScalingToFit() const override;
@@ -67,7 +64,9 @@ private:
     bool m_preloading = false;
 };
 
-VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video)
+VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
+                         const stream<unit> &sTogglePlayVideo,
+                         const stream<qint64> &sStepVideo)
     : m_video(video)
     , m_player(nullptr, QMediaPlayer::VideoSurface)
 {
@@ -95,6 +94,10 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video)
                                             std::bind(&VideoViewer::setItem,
                                                       this,
                                                       std::placeholders::_1)));
+    m_unsubscribe += sTogglePlayVideo.listen(
+        ensureSameThread<unit>(this, [this](unit) { togglePlayVideo(); }));
+    m_unsubscribe += sStepVideo.listen(
+        ensureSameThread<qint64>(this, [this](qint64 s) { stepVideo(s); }));
 }
 
 void VideoViewer::setItem(const OptionalMediaItem &item)
@@ -166,9 +169,6 @@ class PictureViewer : public QGraphicsView, public Viewer
 public:
     explicit PictureViewer(const cell<OptionalMediaItem> &image);
 
-    void togglePlayVideo() override;
-    void stepVideo(qint64 step) override;
-
     void scaleToFit() override;
     bool isScalingToFit() const override;
     void scale(qreal s) override;
@@ -229,16 +229,6 @@ void PictureViewer::setItem(const MediaItem &item)
     });
 }
 
-void PictureViewer::togglePlayVideo()
-{
-    return;
-}
-
-void PictureViewer::stepVideo(qint64)
-{
-    return;
-}
-
 void PictureViewer::scaleToFit()
 {
     m_scalingToFit = true;
@@ -268,15 +258,23 @@ static std::function<OptionalMediaItem(OptionalMediaItem)> itemIfOfType(MediaTyp
     return [type](const OptionalMediaItem &i) { return i && i->type == type ? i : std::nullopt; };
 }
 
-ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item)
+ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item,
+                     const stream<unit> &sTogglePlayVideo,
+                     const sodium::stream<qint64> &sStepVideo)
     : m_item(item)
     , m_layout(new QStackedLayout)
 {
     transaction trans;
     const cell<OptionalMediaItem> optImage = item.map(itemIfOfType(MediaType::Image));
     const cell<OptionalMediaItem> optVideo = item.map(itemIfOfType(MediaType::Video));
+    const cell<bool> hasVideo = optVideo.map([](const OptionalMediaItem &i) { return bool(i); });
+
     auto pictureViewer = new PictureViewer(optImage);
-    auto videoViewer = new VideoViewer(optVideo);
+
+    auto videoViewer = new VideoViewer(optVideo,
+                                       sTogglePlayVideo.gate(hasVideo),
+                                       sStepVideo.gate(hasVideo));
+
     auto noViewer = new QWidget;
     m_layout->addWidget(pictureViewer);
     m_layout->addWidget(videoViewer);
@@ -305,18 +303,6 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item)
     m_scaleToFitTimer.setSingleShot(true);
     m_scaleToFitTimer.setInterval(50);
     connect(&m_scaleToFitTimer, &QTimer::timeout, this, &ImageView::scaleToFit);
-}
-
-void ImageView::togglePlayVideo()
-{
-    if (Viewer *viewer = currentViewer())
-        viewer->togglePlayVideo();
-}
-
-void ImageView::stepVideo(qint64 step)
-{
-    if (Viewer *viewer = currentViewer())
-        viewer->stepVideo(step);
 }
 
 void ImageView::scaleToFit()

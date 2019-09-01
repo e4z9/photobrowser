@@ -38,15 +38,12 @@ private:
 
 class FilmRollView : public QWidget
 {
-    Q_OBJECT
 public:
-    explicit FilmRollView(QWidget *parent = nullptr);
+    FilmRollView(const sodium::stream<sodium::unit> &sTogglePlayVideo,
+                 const sodium::stream<qint64> &sStepVideo);
 
     void setModel(QAbstractItemModel *model);
     QAbstractItemModel *model() const;
-
-    void togglePlayVideo();
-    void stepVideo(qint64 step);
 
     void zoomIn();
     void zoomOut();
@@ -55,14 +52,10 @@ public:
     void previous();
     void next();
 
-    const sodium::cell<boost::optional<int>> &currentIndex() const;
-    OptionalMediaItem _currentItem() const;
-    const sodium::cell<OptionalMediaItem> &currentItem() const;
-
     void setFullscreen(bool fullscreen);
 
-signals:
-    void currentItemChanged();
+    const sodium::cell<boost::optional<int>> &currentIndex() const;
+    const sodium::cell<OptionalMediaItem> &currentItem() const;
 
 private:
     sodium::stream_sink<boost::optional<int>> m_sCurrentIndex;

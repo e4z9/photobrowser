@@ -57,23 +57,21 @@ private:
 
 static constexpr int MARGIN = 10;
 
-FilmRollView::FilmRollView(QWidget *parent)
-    : QWidget(parent)
-    , m_splitter(new FullscreenSplitter)
+FilmRollView::FilmRollView(const stream<unit> &sTogglePlayVideo,
+                           const sodium::stream<qint64> &sStepVideo)
+    : m_splitter(new FullscreenSplitter)
     , m_fotoroll(new Fotoroll(m_sCurrentIndex))
 {
-    // TODO pass on via FRP instead of signal
-    m_unsubscribe += m_fotoroll->currentItem().updates().defer().listen(
-        [this](const OptionalMediaItem &) { emit currentItemChanged(); });
     // delay change of current item in imageview
     const auto sStartSelectionTimer = m_fotoroll->currentItem().updates().map(
         [](const auto &) { return unit(); });
     m_selectionUpdate = std::make_unique<SQTimer>(sStartSelectionTimer);
     const cell<OptionalMediaItem> currentItem
         = m_selectionUpdate->sTimeout().snapshot(m_fotoroll->currentItem()).hold(std::nullopt);
-    m_imageView = new ImageView(currentItem);
     m_selectionUpdate->setInterval(80);
     m_selectionUpdate->setSingleShot(true);
+
+    m_imageView = new ImageView(currentItem, sTogglePlayVideo, sStepVideo);
 
     m_splitter->setOrientation(Qt::Vertical);
     m_splitter->setWidget(FullscreenSplitter::First, m_imageView);
@@ -96,16 +94,6 @@ void FilmRollView::setModel(QAbstractItemModel *model)
 QAbstractItemModel *FilmRollView::model() const
 {
     return m_fotoroll->model();
-}
-
-void FilmRollView::togglePlayVideo()
-{
-    m_imageView->togglePlayVideo();
-}
-
-void FilmRollView::stepVideo(qint64 step)
-{
-    m_imageView->stepVideo(step);
 }
 
 void FilmRollView::zoomIn()
@@ -145,11 +133,6 @@ void FilmRollView::next()
 const sodium::cell<boost::optional<int>> &FilmRollView::currentIndex() const
 {
     return m_fotoroll->cCurrentIndex();
-}
-
-OptionalMediaItem FilmRollView::_currentItem() const
-{
-    return m_fotoroll->currentItem().sample();
 }
 
 const sodium::cell<OptionalMediaItem> &FilmRollView::currentItem() const

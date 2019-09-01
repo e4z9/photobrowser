@@ -30,8 +30,10 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     setCentralWidget(m_splitter);
 
     m_splitter->setOrientation(Qt::Horizontal);
-
-    auto imageView = new FilmRollView;
+    transaction t; // ensure single transaction
+    stream_loop<unit> sTogglePlayVideo;
+    stream_loop<qint64> sStepVideo;
+    auto imageView = new FilmRollView(sTogglePlayVideo, sStepVideo);
     imageView->setModel(&m_model);
     m_splitter->setFullscreenChangedAction(
         [imageView](bool fullscreen) { imageView->setFullscreen(fullscreen); });
@@ -92,6 +94,8 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     const cell<bool> anyItemSelected = imageView->currentItem().map(
         [](const OptionalMediaItem &i) { return bool(i); });
+    const cell<bool> videoItemSelected = imageView->currentItem().map(
+        [](const OptionalMediaItem &i) { return i && i->type == MediaType::Video; });
     const auto snapshotItemFilePath = [imageView](const stream<unit> &s) {
         return s.snapshot(imageView->currentItem())
             .filter(&OptionalMediaItem::operator bool)
@@ -195,32 +199,25 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     // video actions
     auto videoMenu = menubar->addMenu(tr("Video"));
 
-    auto playStop = videoMenu->addAction(tr("Play/Pause"));
+    auto playStop = new SQAction(tr("Play/Pause"), videoItemSelected, videoMenu);
     playStop->setShortcut({"Space"});
-    connect(playStop, &QAction::triggered, imageView, &FilmRollView::togglePlayVideo);
+    sTogglePlayVideo.loop(playStop->sTriggered());
 
-    auto stepForward = videoMenu->addAction(tr("Step Forward"));
+    auto stepForward = new SQAction(tr("Step Forward"), videoItemSelected, videoMenu);
     stepForward->setShortcut({"."});
-    connect(stepForward, &QAction::triggered, imageView, [imageView] {
-        imageView->stepVideo(10000);
-    });
+    const stream<qint64> sForward = stepForward->sTriggered().map(
+        [](unit) { return qint64(10000); });
 
-    auto stepBackward = videoMenu->addAction(tr("Step Backward"));
+    auto stepBackward = new SQAction(tr("Step Backward"), videoItemSelected, videoMenu);
     stepBackward->setShortcut({","});
-    connect(stepBackward, &QAction::triggered, imageView, [imageView] {
-        imageView->stepVideo(-10000);
-    });
+    const stream<qint64> sBackward = stepBackward->sTriggered().map(
+        [](unit) { return qint64(-10000); });
 
-    connect(imageView,
-            &FilmRollView::currentItemChanged,
-            this,
-            [imageView, playStop, stepForward, stepBackward] {
-                const auto currentItem = imageView->_currentItem();
-                const bool enabled = (currentItem && currentItem->type == MediaType::Video);
-                playStop->setEnabled(enabled);
-                stepForward->setEnabled(enabled);
-                stepBackward->setEnabled(enabled);
-            });
+    sStepVideo.loop(sForward.or_else(sBackward));
+
+    videoMenu->addAction(playStop);
+    videoMenu->addAction(stepForward);
+    videoMenu->addAction(stepBackward);
 
     window()->installEventFilter(this);
 }

@@ -22,12 +22,11 @@ class Viewer;
 class ImageView : public QWidget
 {
 public:
-    ImageView(const sodium::cell<OptionalMediaItem> &item);
+    ImageView(const sodium::cell<OptionalMediaItem> &item,
+              const sodium::stream<sodium::unit> &sTogglePlayVideo,
+              const sodium::stream<qint64> &sStepVideo);
 
     const sodium::cell<OptionalMediaItem> &item() const;
-
-    void togglePlayVideo();
-    void stepVideo(qint64 step);
 
     void scaleToFit();
     void scale(qreal s);
