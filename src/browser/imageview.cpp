@@ -90,14 +90,10 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
             });
 
     m_unsubscribe += m_video.listen(
-        ensureSameThread<OptionalMediaItem>(this,
-                                            std::bind(&VideoViewer::setItem,
-                                                      this,
-                                                      std::placeholders::_1)));
+        ensureSameThread<OptionalMediaItem>(this, &VideoViewer::setItem));
     m_unsubscribe += sTogglePlayVideo.listen(
         ensureSameThread<unit>(this, [this](unit) { togglePlayVideo(); }));
-    m_unsubscribe += sStepVideo.listen(
-        ensureSameThread<qint64>(this, [this](qint64 s) { stepVideo(s); }));
+    m_unsubscribe += sStepVideo.listen(ensureSameThread<qint64>(this, &VideoViewer::stepVideo));
 }
 
 void VideoViewer::setItem(const OptionalMediaItem &item)
@@ -287,7 +283,7 @@ ImageView::ImageView(const sodium::cell<OptionalMediaItem> &item,
                         });
 
     m_unsubscribe += viewerWidget.listen(
-        ensureSameThread<QWidget *>(this, [this](QWidget *w) { m_layout->setCurrentWidget(w); }));
+        ensureSameThread<QWidget *>(m_layout, &QStackedLayout::setCurrentWidget));
 
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);

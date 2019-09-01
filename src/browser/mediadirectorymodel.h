@@ -47,7 +47,7 @@ public:
     ~MediaDirectoryModel() override;
 
     void setPath(const QString &path, bool recursive);
-    void moveItemAtIndexToTrash(const QModelIndex &index);
+    void moveItemAtIndexToTrash(int index);
     void setSortKey(SortKey key);
     SortKey sortKey() const;
 

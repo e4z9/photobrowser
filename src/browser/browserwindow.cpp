@@ -86,8 +86,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     // window title
     const cell<QString> title = imageView->currentItem().map(
         [](const OptionalMediaItem &i) { return i ? i->windowTitle() : QString(); });
-    m_unsubscribe += title.listen(
-        ensureSameThread<QString>(this, [this](const QString &s) { setWindowTitle(s); }));
+    m_unsubscribe += title.listen(ensureSameThread<QString>(this, &QWidget::setWindowTitle));
 
     // file actions
     auto fileMenu = menubar->addMenu(tr("File"));
@@ -108,10 +107,9 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     auto openInDefaultEditor = new SQAction(tr("Open in Default Editor"), anyItemSelected, fileMenu);
     openInDefaultEditor->setShortcut({"ctrl+o"});
-    const stream<QString> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered());
-    m_unsubscribe += sOpenEditor.listen(ensureSameThread<QString>(this, [](const QString &fp) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(fp));
-    }));
+    const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered())
+                                         .map(&QUrl::fromLocalFile);
+    m_unsubscribe += sOpenEditor.listen(ensureSameThread<QUrl>(this, &QDesktopServices::openUrl));
 
     auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
@@ -119,9 +117,8 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                          .snapshot(imageView->currentIndex())
                                          .filter(&boost::optional<int>::operator bool)
                                          .map([](const boost::optional<int> &i) { return *i; });
-    m_unsubscribe += sMoveToTrash.listen(ensureSameThread<int>(this, [this](const int &i) {
-        m_model.moveItemAtIndexToTrash(m_model.index(i, 0));
-    }));
+    m_unsubscribe += sMoveToTrash.listen(
+        post<int>(&m_model, &MediaDirectoryModel::moveItemAtIndexToTrash));
 
     fileMenu->addAction(revealInFinder);
     fileMenu->addAction(openInDefaultEditor);
