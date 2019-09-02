@@ -5,7 +5,7 @@
 #include "fullscreensplitter.h"
 #include "sqaction.h"
 
-#include "../util/fileutil.h"
+#include <util/fileutil.h>
 
 #include <qtc/progressindicator.h>
 

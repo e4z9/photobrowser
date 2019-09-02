@@ -2,7 +2,7 @@
 
 #include "thumbnailcreator.h"
 
-#include "../util/metadatautil.h"
+#include <util/metadatautil.h>
 
 #include <QAbstractItemModel>
 #include <QDateTime>

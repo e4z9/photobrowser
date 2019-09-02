@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../util/metadatautil.h"
+#include <util/metadatautil.h>
 
 #include <QAbstractVideoSurface>
 #include <QFutureWatcher>

@@ -1,6 +1,6 @@
 #include "mediadirectorymodel.h"
 
-#include "../util/fileutil.h"
+#include <util/fileutil.h>
 
 #include <qtc/runextensions.h>
 

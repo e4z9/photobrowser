@@ -1,5 +1,5 @@
-#include <../../util/fileutil.h>
-#include <../../util/metadatautil.h>
+#include <util/fileutil.h>
+#include <util/metadatautil.h>
 
 #include <QCoreApplication>
 #include <QDateTime>
