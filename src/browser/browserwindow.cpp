@@ -31,9 +31,10 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     m_splitter->setOrientation(Qt::Horizontal);
 
     transaction t; // ensure single transaction
+    stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;
     stream_loop<qint64> sStepVideo;
-    auto imageView = new FilmRollView(sTogglePlayVideo, sStepVideo, m_sFullscreen);
+    auto imageView = new FilmRollView(sCurrentIndex, sTogglePlayVideo, sStepVideo, m_sFullscreen);
     imageView->setModel(&m_model);
 
     auto leftWidget = new QWidget;
@@ -170,14 +171,25 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     viewMenu->addSeparator();
 
-    auto previousItem = viewMenu->addAction(tr("Previous"));
+    const auto stepIndex = [](int step) {
+        return [step](const boost::optional<int> &i) -> boost::optional<int> {
+            return i ? (*i + step) : 0;
+        };
+    };
+    auto previousItem = new SQAction(tr("Previous"), viewMenu);
     previousItem->setShortcut({"Left"});
-    connect(previousItem, &QAction::triggered, imageView, &FilmRollView::previous);
+    const stream<boost::optional<int>> sPrevious
+        = previousItem->sTriggered().snapshot(imageView->currentIndex()).map(stepIndex(-1));
 
-    auto nextItem = viewMenu->addAction(tr("Next"));
+    auto nextItem = new SQAction(tr("Next"), viewMenu);
     nextItem->setShortcut({"Right"});
-    connect(nextItem, &QAction::triggered, imageView, &FilmRollView::next);
+    const stream<boost::optional<int>> sNext
+        = nextItem->sTriggered().snapshot(imageView->currentIndex()).map(stepIndex(+1));
 
+    sCurrentIndex.loop(sPrevious.or_else(sNext));
+
+    viewMenu->addAction(previousItem);
+    viewMenu->addAction(nextItem);
     viewMenu->addSeparator();
 
     const cell<bool> fullscreen = m_sFullscreen.hold(false);

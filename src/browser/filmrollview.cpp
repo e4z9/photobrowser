@@ -57,11 +57,12 @@ private:
 
 static constexpr int MARGIN = 10;
 
-FilmRollView::FilmRollView(const stream<unit> &sTogglePlayVideo,
+FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
+                           const stream<unit> &sTogglePlayVideo,
                            const sodium::stream<qint64> &sStepVideo,
                            const sodium::stream<bool> &sFullscreen)
     : m_splitter(new FullscreenSplitter(sFullscreen))
-    , m_fotoroll(new Fotoroll(m_sCurrentIndex))
+    , m_fotoroll(new Fotoroll(sCurrentIndex))
 {
     // delay change of current item in imageview
     const auto sStartSelectionTimer = m_fotoroll->currentItem().updates().map(
@@ -108,24 +109,6 @@ void FilmRollView::zoomOut()
 void FilmRollView::scaleToFit()
 {
     m_imageView->scaleToFit();
-}
-
-void FilmRollView::previous()
-{
-    const auto currentIndex = m_fotoroll->cCurrentIndex().sample();
-    if (!currentIndex)
-        m_sCurrentIndex.send(0);
-    else if (currentIndex)
-        m_sCurrentIndex.send(*currentIndex - 1);
-}
-
-void FilmRollView::next()
-{
-    const auto currentIndex = m_fotoroll->cCurrentIndex().sample();
-    if (!currentIndex)
-        m_sCurrentIndex.send(0);
-    else if (currentIndex)
-        m_sCurrentIndex.send(*currentIndex + 1);
 }
 
 const sodium::cell<boost::optional<int>> &FilmRollView::currentIndex() const

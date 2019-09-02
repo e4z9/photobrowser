@@ -39,7 +39,8 @@ private:
 class FilmRollView : public QWidget
 {
 public:
-    FilmRollView(const sodium::stream<sodium::unit> &sTogglePlayVideo,
+    FilmRollView(const sodium::stream<boost::optional<int>> &sCurrentIndex,
+                 const sodium::stream<sodium::unit> &sTogglePlayVideo,
                  const sodium::stream<qint64> &sStepVideo,
                  const sodium::stream<bool> &sFullscreen);
 
@@ -50,14 +51,10 @@ public:
     void zoomOut();
     void scaleToFit();
 
-    void previous();
-    void next();
-
     const sodium::cell<boost::optional<int>> &currentIndex() const;
     const sodium::cell<OptionalMediaItem> &currentItem() const;
 
 private:
-    sodium::stream_sink<boost::optional<int>> m_sCurrentIndex;
     Unsubscribe m_unsubscribe;
     FullscreenSplitter *m_splitter;
     Fotoroll *m_fotoroll;
