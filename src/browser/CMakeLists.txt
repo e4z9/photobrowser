@@ -3,17 +3,28 @@ find_package(SodiumCxx REQUIRED)
 
 add_executable(photobrowser WIN32 MACOSX_BUNDLE
     app.cpp
+    app.h
     browserwindow.cpp
+    browserwindow.h
     directorytree.cpp
+    directorytree.h
     filmrollview.cpp
+    filmrollview.h
     fullscreensplitter.cpp
+    fullscreensplitter.h
     imageview.cpp
+    imageview.h
     main.cpp
     mediadirectorymodel.cpp
-    sqaction.cpp sqaction.h
-    sqlistview.cpp sqlistview.h
-    sqtimer.cpp sqtimer.h
+    mediadirectorymodel.h
+    sqaction.cpp
+    sqaction.h
+    sqlistview.cpp
+    sqlistview.h
+    sqtimer.cpp
+    sqtimer.h
     thumbnailcreator.cpp
+    thumbnailcreator.h
     tools.cpp
     tools.h
 )
