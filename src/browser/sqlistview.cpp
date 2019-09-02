@@ -4,8 +4,13 @@ using namespace sodium;
 
 SQListView::SQListView(const sodium::stream<boost::optional<int>> &sCurrentIndex)
     : m_currentIndex(boost::none)
+    , m_count(0)
 {
-    m_unsubscribe += sCurrentIndex.listen(
+    const stream<boost::optional<int>> sBoundedCurrentIndex = sCurrentIndex.filter(
+        [this](const auto &optIndex) {
+            return !optIndex || (*optIndex < m_count.sample() && *optIndex >= 0);
+        });
+    m_unsubscribe += sBoundedCurrentIndex.listen(
         ensureSameThread<boost::optional<int>>(this, [this](boost::optional<int> i) {
             if (!model())
                 return;
@@ -19,7 +24,7 @@ SQListView::SQListView(const sodium::stream<boost::optional<int>> &sCurrentIndex
             }
             blockChange = false;
         }));
-    m_currentIndex = sCurrentIndex.or_else(m_sUserCurrentIndex).hold(boost::none);
+    m_currentIndex = sBoundedCurrentIndex.or_else(m_sUserCurrentIndex).hold(boost::none);
 }
 
 void SQListView::setModel(QAbstractItemModel *m)
@@ -28,16 +33,25 @@ void SQListView::setModel(QAbstractItemModel *m)
         disconnect(model(), nullptr, this, nullptr);
     QListView::setModel(m);
     if (model()) {
-        connect(model(), &QAbstractItemModel::modelReset, this, &SQListView::checkUpdateCurrent);
-        connect(model(), &QAbstractItemModel::rowsMoved, this, &SQListView::checkUpdateCurrent);
-        connect(model(), &QAbstractItemModel::rowsRemoved, this, &SQListView::checkUpdateCurrent);
-        connect(model(), &QAbstractItemModel::rowsInserted, this, &SQListView::checkUpdateCurrent);
+        connect(model(), &QAbstractItemModel::modelReset, this, &SQListView::updateCountAndCurrent);
+        connect(model(), &QAbstractItemModel::rowsMoved, this, &SQListView::updateCurrent);
+        connect(model(), &QAbstractItemModel::rowsRemoved, this, &SQListView::updateCountAndCurrent);
+        connect(model(),
+                &QAbstractItemModel::rowsInserted,
+                this,
+                &SQListView::updateCountAndCurrent);
     }
+    updateCountAndCurrent();
 }
 
 const sodium::cell<boost::optional<int>> &SQListView::cCurrentIndex() const
 {
     return m_currentIndex;
+}
+
+const sodium::cell<int> &SQListView::count() const
+{
+    return m_count;
 }
 
 void SQListView::currentChanged(const QModelIndex &current, const QModelIndex &previous)
@@ -47,10 +61,20 @@ void SQListView::currentChanged(const QModelIndex &current, const QModelIndex &p
     // the current item is set to the first, but the selection is not set, nor visible
     if (!previous.isValid() && current.isValid() && !selectionModel()->isSelected(current))
         selectionModel()->select(current, QItemSelectionModel::Select);
-    checkUpdateCurrent();
+    updateCurrent();
 }
 
-void SQListView::checkUpdateCurrent()
+void SQListView::updateCountAndCurrent()
+{
+    transaction t; // put this and updateCurrent into same transaction
+    const int count = m_count.sample();
+    const int modelCount = model() ? model()->rowCount() : 0;
+    if (count != modelCount)
+        m_count.send(modelCount);
+    updateCurrent();
+}
+
+void SQListView::updateCurrent()
 {
     if (blockChange)
         return;

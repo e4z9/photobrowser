@@ -113,19 +113,18 @@ void FilmRollView::scaleToFit()
 void FilmRollView::previous()
 {
     const auto currentIndex = m_fotoroll->cCurrentIndex().sample();
-    if (!currentIndex && m_fotoroll->model()->rowCount() > 0)
+    if (!currentIndex)
         m_sCurrentIndex.send(0);
-    else if (currentIndex && *currentIndex > 0)
+    else if (currentIndex)
         m_sCurrentIndex.send(*currentIndex - 1);
 }
 
 void FilmRollView::next()
 {
     const auto currentIndex = m_fotoroll->cCurrentIndex().sample();
-    const int rowCount = m_fotoroll->model()->rowCount();
-    if (!currentIndex && rowCount > 0)
+    if (!currentIndex)
         m_sCurrentIndex.send(0);
-    else if (currentIndex && *currentIndex < rowCount - 1)
+    else if (currentIndex)
         m_sCurrentIndex.send(*currentIndex + 1);
 }
 
