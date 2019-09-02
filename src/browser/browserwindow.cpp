@@ -101,13 +101,13 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto revealInFinder = new SQAction(tr("Reveal in Finder"), anyItemSelected, fileMenu);
     revealInFinder->setShortcut({"o"});
     const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->sTriggered());
-    m_unsubscribe += sReveal.listen(ensureSameThread<QString>(this, &Util::revealInFinder));
+    m_unsubscribe += sReveal.listen(post<QString>(this, &Util::revealInFinder));
 
     auto openInDefaultEditor = new SQAction(tr("Open in Default Editor"), anyItemSelected, fileMenu);
     openInDefaultEditor->setShortcut({"ctrl+o"});
     const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered())
                                          .map(&QUrl::fromLocalFile);
-    m_unsubscribe += sOpenEditor.listen(ensureSameThread<QUrl>(this, &QDesktopServices::openUrl));
+    m_unsubscribe += sOpenEditor.listen(post<QUrl>(this, &QDesktopServices::openUrl));
 
     auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
