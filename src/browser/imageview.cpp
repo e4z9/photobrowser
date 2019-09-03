@@ -1,7 +1,5 @@
 #include "imageview.h"
 
-#include "tools.h"
-
 #include <qtc/runextensions.h>
 
 #include <QGestureEvent>

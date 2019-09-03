@@ -2,7 +2,7 @@
 
 #include "mediadirectorymodel.h"
 
-#include "tools.h"
+#include <sqtools.h>
 
 #include <QMainWindow>
 #include <QSettings>

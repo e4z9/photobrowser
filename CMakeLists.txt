@@ -11,6 +11,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(Exiv2 REQUIRED)
 find_package(Qt5 COMPONENTS Core Gui Widgets REQUIRED)
+find_package(SodiumCxx REQUIRED)
 
 if(APPLE)
     find_library(FWFoundation Foundation)
@@ -19,5 +20,6 @@ endif()
 
 add_subdirectory(src/util)
 add_subdirectory(src/3rdparty/qtc)
+add_subdirectory(src/sodium-qt)
 add_subdirectory(src/browser)
 add_subdirectory(src/tools/setdatefrommeta)

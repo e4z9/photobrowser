@@ -1,5 +1,4 @@
 find_package(Qt5 COMPONENTS Multimedia MultimediaWidgets REQUIRED)
-find_package(SodiumCxx REQUIRED)
 
 add_executable(photobrowser WIN32 MACOSX_BUNDLE
     app.cpp
@@ -17,16 +16,8 @@ add_executable(photobrowser WIN32 MACOSX_BUNDLE
     main.cpp
     mediadirectorymodel.cpp
     mediadirectorymodel.h
-    sqaction.cpp
-    sqaction.h
-    sqlistview.cpp
-    sqlistview.h
-    sqtimer.cpp
-    sqtimer.h
     thumbnailcreator.cpp
     thumbnailcreator.h
-    tools.cpp
-    tools.h
 )
 
 set_target_properties(photobrowser PROPERTIES
@@ -36,5 +27,5 @@ set_target_properties(photobrowser PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
 )
 
-target_link_libraries(photobrowser Qt5::Multimedia Qt5::MultimediaWidgets SodiumCxx thirdparty_qtc
+target_link_libraries(photobrowser Qt5::Multimedia Qt5::MultimediaWidgets sodium-qt thirdparty_qtc
     util)

@@ -2,8 +2,8 @@
 
 #include "mediadirectorymodel.h"
 
-#include "sqtimer.h"
-#include "tools.h"
+#include <sqtimer.h>
+#include <sqtools.h>
 
 #include <QAbstractItemModel>
 #include <QListView>
