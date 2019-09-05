@@ -12,6 +12,7 @@ class App : public QObject
     Q_OBJECT
 public:
     explicit App(QObject *parent = nullptr);
+    ~App() override;
 
     bool eventFilter(QObject *obj, QEvent *ev) override;
 

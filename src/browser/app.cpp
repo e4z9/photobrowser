@@ -4,6 +4,8 @@
 #include <QFileOpenEvent>
 #include <QTimer>
 
+#include <gst/gst.h>
+
 const char kMainWindow[] = "MainWindow";
 
 static void withGroup(QSettings *settings,
@@ -26,6 +28,13 @@ App::App(QObject *parent)
         if (!m_settings)
             createWindow({});
     });
+
+    gst_init(nullptr, nullptr);
+}
+
+App::~App()
+{
+    gst_deinit();
 }
 
 bool App::eventFilter(QObject *obj, QEvent *ev)

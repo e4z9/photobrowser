@@ -1,4 +1,5 @@
 find_package(Qt5 COMPONENTS Multimedia MultimediaWidgets REQUIRED)
+find_package(gstreamer-1.0 REQUIRED)
 
 add_executable(photobrowser WIN32 MACOSX_BUNDLE
     app.cpp
@@ -28,4 +29,4 @@ set_target_properties(photobrowser PROPERTIES
 )
 
 target_link_libraries(photobrowser Qt5::Multimedia Qt5::MultimediaWidgets sodium-qt thirdparty_qtc
-    util)
+    util gstreamer)

@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QImageReader>
+#include <QMediaPlayer>
 #include <QMimeDatabase>
 
 #include <algorithm>

@@ -4,7 +4,6 @@
 
 #include <QAbstractVideoSurface>
 #include <QFutureWatcher>
-#include <QMediaPlayer>
 
 #include <deque>
 #include <unordered_map>

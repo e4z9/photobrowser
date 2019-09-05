@@ -7,7 +7,9 @@
 #include <QImageReader>
 #include <QLoggingCategory>
 #include <QTimer>
-#include <QVideoSurfaceFormat>
+#include <QUrl>
+
+#include <gst/gst.h>
 
 template<typename T, typename Function>
 const QFuture<T> &onFinished(const QFuture<T> &future, QObject *guard, Function f)
@@ -142,145 +144,108 @@ void PictureThumbnailer::requestThumbnail(const QString &resolvedFilePath,
                });
 }
 
-class VideoThumbnailCreator : public QAbstractVideoSurface
+class GstElementRef
 {
 public:
-    VideoThumbnailCreator(const QString &resolvedFilePath, int maxSize);
+    GstElementRef(GstElement *element)
+        : m_element(element)
+    {}
+    ~GstElementRef()
+    {
+        if (m_cleanup)
+            m_cleanup(m_element);
+        gst_object_unref(m_element);
+    }
 
-    QList<QVideoFrame::PixelFormat> supportedPixelFormats(
-        QAbstractVideoBuffer::HandleType type = QAbstractVideoBuffer::NoHandle) const override;
-    bool isFormatSupported(const QVideoSurfaceFormat &format) const override;
-    bool start(const QVideoSurfaceFormat &format) override;
-    bool present(const QVideoFrame &frame) override;
+    GstElement *operator()() const { return m_element; }
 
-    QString resolvedFilePath() const;
-    QFuture<ThumbnailItem> future();
+    using CleanUp = std::function<void(GstElement *)>;
+    void setCleanUp(const CleanUp &cleanup) { m_cleanup = cleanup; }
 
 private:
-    void cancel();
-
-    const QString m_resolvedFilePath;
-    QFutureInterface<ThumbnailItem> m_fi;
-    QFutureWatcher<ThumbnailItem> m_watcher;
-    QMediaPlayer m_player;
-    QImage::Format m_imageFormat;
-    QSize m_imageSize;
-    QRect m_imageRect;
-    int m_maxSize;
-    bool m_readyForSnapshot = false;
-    bool m_snapshotDone = false;
+    GstElement *m_element;
+    CleanUp m_cleanup;
 };
 
-VideoThumbnailCreator::VideoThumbnailCreator(const QString &resolvedFilePath, int maxSize)
-    : m_resolvedFilePath(resolvedFilePath)
-    , m_maxSize(maxSize)
+static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
+                                 const QString &resolvedFilePath,
+                                 const int maxSize)
 {
-    connect(&m_watcher, &QFutureWatcherBase::finished, this, &QObject::deleteLater);
-    connect(&m_watcher, &QFutureWatcherBase::canceled, this, &VideoThumbnailCreator::cancel);
-    m_watcher.setFuture(m_fi.future());
-    m_fi.reportStarted();
-    m_player.setVideoOutput(this);
-    connect(&m_player,
-            &QMediaPlayer::mediaStatusChanged,
-            this,
-            [this](const QMediaPlayer::MediaStatus status) {
-                if (status == QMediaPlayer::InvalidMedia) {
-                    m_fi.reportResult({});
-                    cancel();
-                }
-                if (status == QMediaPlayer::LoadedMedia) {
-                    QTimer::singleShot(0, this, [this] { m_player.play(); });
-                }
-            });
-    m_player.setMedia(QUrl::fromLocalFile(resolvedFilePath));
-    m_player.setMuted(true);
-}
-
-QList<QVideoFrame::PixelFormat> VideoThumbnailCreator::supportedPixelFormats(
-    QAbstractVideoBuffer::HandleType type) const
-{
-    if (type == QAbstractVideoBuffer::NoHandle)
-        return {QVideoFrame::Format_RGB32,
-                QVideoFrame::Format_ARGB32,
-                QVideoFrame::Format_ARGB32_Premultiplied,
-                QVideoFrame::Format_RGB565,
-                QVideoFrame::Format_RGB555};
-    return {};
-}
-
-bool VideoThumbnailCreator::isFormatSupported(const QVideoSurfaceFormat &format) const
-{
-    const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(format.pixelFormat());
-    const QSize size = format.frameSize();
-
-    return imageFormat != QImage::Format_Invalid && !size.isEmpty()
-           && format.handleType() == QAbstractVideoBuffer::NoHandle;
-}
-
-bool VideoThumbnailCreator::start(const QVideoSurfaceFormat &format)
-{
-    const QImage::Format imageFormat = QVideoFrame::imageFormatFromPixelFormat(format.pixelFormat());
-    const QSize size = format.frameSize();
-
-    if (imageFormat != QImage::Format_Invalid && !size.isEmpty()) {
-        m_imageFormat = imageFormat;
-        m_imageSize = size;
-        m_imageRect = format.viewport();
-        QAbstractVideoSurface::start(format);
-        return true;
+    const QByteArray uri = QUrl::fromLocalFile(resolvedFilePath).toEncoded();
+    GError *error = nullptr;
+    GstElementRef pipeline(
+        gst_parse_launch(QByteArray(
+                             "uridecodebin uri=" + uri
+                             + " ! videoconvert ! videoscale ! videoflip video-direction=auto !"
+                               " appsink name=sink caps="
+                               "\"video/x-raw,format=RGB,pixel-aspect-ratio=1/1\"")
+                             .constData(),
+                         &error));
+    if (error != nullptr) {
+        qDebug(logThumb) << "gstreamer: failed to create pipeline \"" << error->message << "\"";
+        g_error_free(error);
+        return;
     }
-    return false;
-}
-
-bool VideoThumbnailCreator::present(const QVideoFrame &frame)
-{
-    static const qint64 snapshotTime = 10;
-    if (m_snapshotDone)
-        return false;
-    if (!m_readyForSnapshot
-        || (m_player.position() < snapshotTime
-            && m_player.duration()
-                   >= snapshotTime)) { // Delay once. First presentation is broken with black frame
-        m_readyForSnapshot = true;
-        return true;
+    GstElementRef sink(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
+    if (fi.isCanceled())
+        return;
+    GstStateChangeReturn stateChange = gst_element_set_state(pipeline(), GST_STATE_PAUSED);
+    bool pauseFailed = stateChange == GST_STATE_CHANGE_FAILURE
+                       || stateChange == GST_STATE_CHANGE_NO_PREROLL;
+    if (!pauseFailed) {
+        stateChange = gst_element_get_state(pipeline(), nullptr, nullptr, 3 * GST_SECOND);
+        pauseFailed = stateChange == GST_STATE_CHANGE_FAILURE;
     }
-    if (surfaceFormat().pixelFormat() != frame.pixelFormat()
-        || surfaceFormat().frameSize() != frame.size()) {
-        setError(IncorrectFormatError);
-        m_fi.reportResult({});
+    if (pauseFailed) {
+        qDebug(logThumb) << "gstreamer: cannot play file" << resolvedFilePath;
+        return;
     }
-    QVideoFrame currentFrame = frame;
-    if (currentFrame.map(QAbstractVideoBuffer::ReadOnly)) {
-        const QImage image(currentFrame.bits(),
-                           currentFrame.width(),
-                           currentFrame.height(),
-                           currentFrame.bytesPerLine(),
-                           m_imageFormat);
-        QImage imageCopy(image);
-        imageCopy.bits(); // detach / create copy of the pixel data
-        currentFrame.unmap();
-        m_fi.reportResult({restrictImageToSize(imageCopy, m_maxSize), m_player.duration()});
+    pipeline.setCleanUp([](GstElement *e) { gst_element_set_state(e, GST_STATE_NULL); });
+    if (fi.isCanceled())
+        return;
+    gint64 duration;
+    gst_element_query_duration(pipeline(), GST_FORMAT_TIME, &duration);
+    gint64 snapshotPos = duration < 0 ? (100 * GST_MSECOND) : (duration * 3 / 100);
+    gst_element_seek_simple(pipeline(),
+                            GST_FORMAT_TIME,
+                            GstSeekFlags(GST_SEEK_FLAG_KEY_UNIT | GST_SEEK_FLAG_FLUSH),
+                            snapshotPos);
+    if (fi.isCanceled())
+        return;
+    GstSample *sample;
+    g_signal_emit_by_name(sink(), "pull-preroll", &sample, nullptr);
+    if (fi.isCanceled())
+        return;
+    bool success = false;
+    if (sample) {
+        GstCaps *caps = gst_sample_get_caps(sample);
+        GstStructure *structure = gst_caps_get_structure(caps, 0);
+        int width;
+        int height;
+        success = gst_structure_get_int(structure, "width", &width);
+        success = success | gst_structure_get_int(structure, "height", &height);
+        if (success) {
+            GstBuffer *buffer = gst_sample_get_buffer(sample);
+            GstMapInfo mapInfo;
+            gst_buffer_map(buffer, &mapInfo, GST_MAP_READ);
+            const std::size_t memcount = mapInfo.maxsize * sizeof(gint8);
+            uchar *data = reinterpret_cast<uchar *>(std::malloc(memcount));
+            memcpy(data, mapInfo.data, memcount);
+            QImage img(
+                data,
+                width,
+                height,
+                GST_ROUND_UP_4(width * 3),
+                QImage::Format_RGB888,
+                [](void *d) { std::free(d); },
+                data);
+            fi.reportResult({restrictImageToSize(img, maxSize), duration / GST_MSECOND});
+            gst_buffer_unmap(buffer, &mapInfo);
+        }
+        gst_sample_unref(sample);
     }
-    m_snapshotDone = true;
-    stop();
-    cancel();
-    return false;
-}
-
-QString VideoThumbnailCreator::resolvedFilePath() const
-{
-    return m_resolvedFilePath;
-}
-
-QFuture<ThumbnailItem> VideoThumbnailCreator::future()
-{
-    return m_fi.future();
-}
-
-void VideoThumbnailCreator::cancel()
-{
-    m_player.setMedia({});
-    m_fi.reportFinished();
+    if (!success)
+        qDebug(logThumb) << "gstreamer: failed to create thumbnail" << resolvedFilePath;
 }
 
 class VideoThumbnailer : public Thumbnailer
@@ -295,7 +260,9 @@ public:
                           const int maxSize) override;
 
 private:
-    QPointer<VideoThumbnailCreator> m_creator;
+    bool isRunning() const { return m_future.isRunning(); }
+    QString m_currentFilePath;
+    QFuture<ThumbnailItem> m_future;
 };
 
 MediaType VideoThumbnailer::mediaType() const
@@ -305,20 +272,19 @@ MediaType VideoThumbnailer::mediaType() const
 
 bool VideoThumbnailer::hasCapacity() const
 {
-    return !m_creator;
+    return !isRunning();
 }
 
 bool VideoThumbnailer::isRunning(const QString &resolvedFilePath) const
 {
-    return m_creator && m_creator->resolvedFilePath() == resolvedFilePath;
+    return isRunning() && m_currentFilePath == resolvedFilePath;
 }
 
 void VideoThumbnailer::cancel(const QString &resolvedFilePath)
 {
-    if (m_creator && m_creator->resolvedFilePath() == resolvedFilePath) {
+    if (isRunning(resolvedFilePath)) {
         qDebug(logThumb) << "canceling" << resolvedFilePath;
-        m_creator->future().cancel();
-        m_creator.clear();
+        m_future.cancel();
     }
 }
 
@@ -326,20 +292,20 @@ void VideoThumbnailer::requestThumbnail(const QString &resolvedFilePath,
                                         Util::Orientation orientation,
                                         const int maxSize)
 {
-    if (m_creator)
-        cancel(m_creator->resolvedFilePath());
+    Q_UNUSED(orientation)
+    if (isRunning())
+        cancel(m_currentFilePath);
     qDebug(logThumb) << "starting" << resolvedFilePath;
-    m_creator = new VideoThumbnailCreator(resolvedFilePath, maxSize);
-    onFinished(m_creator->future(),
-               this,
-               [this, resolvedFilePath](const QFuture<ThumbnailItem> &future) {
-                   qDebug(logThumb) << "finished" << resolvedFilePath;
-                   m_creator.clear();
-                   if (!future.isCanceled() && future.resultCount() > 0) {
-                       const auto result = future.result();
-                       emit thumbnailReady(resolvedFilePath, result.image, result.duration);
-                   }
-               });
+    m_currentFilePath = resolvedFilePath;
+    QFutureInterface<ThumbnailItem> foo;
+    m_future = Utils::runAsync(createVideoThumbnail, resolvedFilePath, maxSize);
+    onFinished(m_future, this, [this, resolvedFilePath](const QFuture<ThumbnailItem> &future) {
+        qDebug(logThumb) << "finished" << resolvedFilePath;
+        if (!future.isCanceled() && future.resultCount() > 0) {
+            const auto result = future.result();
+            emit thumbnailReady(resolvedFilePath, result.image, result.duration);
+        }
+    });
 }
 
 } // namespace
