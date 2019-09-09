@@ -1,4 +1,4 @@
-find_package(Qt5 COMPONENTS Multimedia MultimediaWidgets REQUIRED)
+find_package(Qt5 COMPONENTS Multimedia REQUIRED)
 find_package(gstreamer-1.0 REQUIRED)
 
 add_executable(photobrowser WIN32 MACOSX_BUNDLE
@@ -12,6 +12,8 @@ add_executable(photobrowser WIN32 MACOSX_BUNDLE
     filmrollview.h
     fullscreensplitter.cpp
     fullscreensplitter.h
+    gstreamer_utils.cpp
+    gstreamer_utils.h
     imageview.cpp
     imageview.h
     main.cpp
@@ -28,5 +30,5 @@ set_target_properties(photobrowser PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
 )
 
-target_link_libraries(photobrowser Qt5::Multimedia Qt5::MultimediaWidgets sodium-qt thirdparty_qtc
+target_link_libraries(photobrowser Qt5::Multimedia sodium-qt thirdparty_qtc
     util gstreamer)

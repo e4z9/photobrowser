@@ -1,19 +1,24 @@
 #include "imageview.h"
 
+#include "gstreamer_utils.h"
+
 #include <qtc/runextensions.h>
 
 #include <QGestureEvent>
 #include <QGraphicsObject>
 #include <QGraphicsPixmapItem>
-#include <QGraphicsVideoItem>
 #include <QGraphicsView>
 #include <QGuiApplication>
-#include <QMediaPlayer>
+#include <QLoggingCategory>
 #include <QStackedLayout>
 
 #include <QCoreApplication>
 #include <QThread>
 #include <QTimer>
+
+#include <gst/gst.h>
+
+Q_LOGGING_CATEGORY(logView, "browser.viewer", QtWarningMsg)
 
 using namespace sodium;
 
@@ -33,6 +38,212 @@ public:
     virtual void scale(qreal s) = 0;
 };
 
+class VideoPlayer : public QObject
+{
+public:
+    VideoPlayer(const cell<std::optional<QUrl>> &uri,
+                const stream<unit> &sTogglePlayVideo,
+                const stream<qint64> &sStepVideo);
+    ~VideoPlayer() override = default;
+
+    const cell<std::optional<QImage>> frame() const;
+
+    // internal
+    GstBusSyncReply message_cb(GstMessage *message);
+    void fetchPreroll();
+    void fetchNewSample();
+
+private:
+    void init();
+    const int STATE_EOS = GST_STATE_PLAYING + 1;
+    cell_sink<GstState> state;
+    cell_sink<std::optional<QImage>> frame_sink;
+    GstElementRef pipeline;
+    GstElementRef source;
+    GstElementRef sink;
+};
+
+static GstBusSyncReply vp_message_cb(GstBus *, GstMessage *m, gpointer player)
+{
+    return reinterpret_cast<VideoPlayer *>(player)->message_cb(m);
+}
+
+static GstFlowReturn new_preroll_cb(GstElement *, VideoPlayer *player)
+{
+    player->fetchPreroll();
+    return GST_FLOW_OK;
+}
+
+static GstFlowReturn new_sample_cb(GstElement *, VideoPlayer *player)
+{
+    player->fetchNewSample();
+    return GST_FLOW_OK;
+}
+
+VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
+                         const stream<unit> &sTogglePlayVideo,
+                         const stream<qint64> &sStepVideo)
+    : state(GST_STATE_NULL)
+    , frame_sink(std::nullopt)
+{
+    pipeline.setCleanUp([](GstElement *e) {
+        if (e)
+            gst_element_set_state(e, GST_STATE_NULL);
+    });
+    init();
+    uri.listen(post<std::optional<QUrl>>(this, [this](const std::optional<QUrl> &uri) {
+        transaction t;
+        init();
+        state.send(GST_STATE_NULL);
+        frame_sink.send(std::nullopt);
+        if (source())
+            g_object_set(source(), "uri", (uri ? uri->toEncoded().constData() : nullptr), nullptr);
+        if (pipeline() && uri)
+            gst_element_set_state(pipeline(), GST_STATE_PAUSED);
+    }));
+    sStepVideo.listen(post<qint64>(this, [this](qint64 step) {
+        if (!pipeline())
+            return;
+        gint64 position;
+        if (gst_element_query_position(pipeline(), GST_FORMAT_TIME, &position)) {
+            const GstSeekFlags snapOption = step < 0 ? GST_SEEK_FLAG_SNAP_BEFORE
+                                                     : GST_SEEK_FLAG_SNAP_AFTER;
+            gst_element_seek_simple(pipeline(),
+                                    GST_FORMAT_TIME,
+                                    GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT
+                                                 | snapOption),
+                                    position + GST_MSECOND * step);
+        }
+    }));
+    sTogglePlayVideo.snapshot(state).listen(post<GstState>(this, [this](GstState state) {
+        if (pipeline()) {
+            if (state == STATE_EOS) {
+                gst_element_seek_simple(pipeline(),
+                                        GST_FORMAT_TIME,
+                                        GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
+                                        0);
+            }
+            gst_element_set_state(pipeline(),
+                                  state == GST_STATE_PAUSED || state == STATE_EOS
+                                      ? GST_STATE_PLAYING
+                                      : GST_STATE_PAUSED);
+        }
+    }));
+}
+
+const cell<std::optional<QImage>> VideoPlayer::frame() const
+{
+    return frame_sink;
+}
+
+GstBusSyncReply VideoPlayer::message_cb(GstMessage *message)
+{
+    if (GST_MESSAGE_SRC(message) == GST_OBJECT(pipeline())) {
+        if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_STATE_CHANGED) {
+            GstState newState;
+            gst_message_parse_state_changed(message, nullptr, &newState, nullptr);
+            state.send(newState);
+        } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {
+            state.send(GstState(STATE_EOS));
+        }
+    }
+    gst_message_unref(message);
+    return GST_BUS_DROP;
+}
+
+void VideoPlayer::fetchPreroll()
+{
+    if (!sink())
+        return;
+    GstSample *sample;
+    g_signal_emit_by_name(sink(), "pull-preroll", &sample, nullptr);
+    const std::optional<QImage> image = imageFromGstSample(sample);
+    gst_sample_unref(sample);
+    if (image) // locking of send can interfere with locking of setting GST_STATE_NULL
+        QMetaObject::invokeMethod(this, [this, image] { frame_sink.send(image); });
+}
+
+void VideoPlayer::fetchNewSample()
+{
+    if (!sink())
+        return;
+    GstSample *sample;
+    g_signal_emit_by_name(sink(), "pull-sample", &sample, nullptr);
+    const std::optional<QImage> image = imageFromGstSample(sample);
+    gst_sample_unref(sample);
+    if (image) // locking of send can interfere with locking of setting GST_STATE_NULL
+        QMetaObject::invokeMethod(this, [this, image] { frame_sink.send(image); });
+}
+
+void VideoPlayer::init()
+{
+    sink.reset();
+    source.reset();
+    GError *error = nullptr;
+    pipeline.reset(gst_parse_launch(
+        "uridecodebin name=source "
+        "source. ! queue ! videoconvert ! videoscale ! videoflip video-direction=auto ! "
+        "appsink name=sink caps=\"video/x-raw,format=RGB,pixel-aspect-ratio=1/1\" "
+        "source. ! queue ! audioconvert ! audioresample ! autoaudiosink",
+        &error));
+    if (error != nullptr) {
+        qWarning(logView) << "gstreamer: failed to create pipeline \"" << error->message << "\"";
+        g_error_free(error);
+        return;
+    }
+    sink.reset(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
+    source.reset(gst_bin_get_by_name(GST_BIN(pipeline()), "source"));
+    GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline()));
+    gst_bus_set_sync_handler(bus, &vp_message_cb, this, nullptr);
+
+    g_object_set(sink(), "emit-signals", true, nullptr);
+    g_signal_connect(sink(), "new-preroll", G_CALLBACK(&new_preroll_cb), this);
+    g_signal_connect(sink(), "new-sample", G_CALLBACK(&new_sample_cb), this);
+}
+
+class VideoGraphicsItem : public QGraphicsItem
+{
+public:
+    VideoGraphicsItem(const cell<std::optional<QImage>> &image);
+
+    QRectF boundingRect() const override;
+    void paint(QPainter *painter,
+               const QStyleOptionGraphicsItem *option,
+               QWidget *widget = nullptr) override;
+
+    std::function<void(QRectF)> rectCallback;
+
+private:
+    cell<std::optional<QImage>> image;
+    QRectF currentRect;
+};
+
+VideoGraphicsItem::VideoGraphicsItem(const cell<std::optional<QImage>> &image)
+    : image(image)
+{
+    this->image.listen(ensureSameThread<std::optional<QImage>>(qApp, [this](const auto &i) {
+        if ((i && QRectF(i->rect()) != currentRect) || (!i && !currentRect.isNull())) {
+            prepareGeometryChange();
+            currentRect = i ? QRectF(i->rect()) : QRectF();
+            if (rectCallback)
+                rectCallback(currentRect);
+        }
+        update();
+    }));
+}
+
+QRectF VideoGraphicsItem::boundingRect() const
+{
+    return currentRect;
+}
+
+void VideoGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *)
+{
+    const auto i = image.sample();
+    if (i)
+        painter->drawImage(boundingRect(), *i);
+}
+
 class VideoViewer : public QGraphicsView, public Viewer
 {
 public:
@@ -41,30 +252,21 @@ public:
                 const stream<qint64> &sStepVideo,
                 const stream<bool> &sFullscreen);
 
-    void togglePlayVideo();
-    void stepVideo(qint64 step);
-
     void scaleToFit() override;
     bool isScalingToFit() const override;
     void scale(qreal s) override;
 
 private:
-    void setItem(const OptionalMediaItem &item);
-
-    cell<OptionalMediaItem> m_video;
     Unsubscribe m_unsubscribe;
-    QGraphicsItem *m_item = nullptr;
-    QMediaPlayer m_player;
+    VideoGraphicsItem *m_item = nullptr;
+    std::unique_ptr<VideoPlayer> m_player;
     bool m_scalingToFit = false;
-    bool m_preloading = false;
 };
 
 VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
                          const stream<unit> &sTogglePlayVideo,
                          const stream<qint64> &sStepVideo,
                          const stream<bool> &sFullscreen)
-    : m_video(video)
-    , m_player(nullptr, QMediaPlayer::VideoSurface)
 {
     setScene(new QGraphicsScene(this));
     setTransformationAnchor(AnchorUnderMouse);
@@ -73,67 +275,25 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
     setRenderHint(QPainter::Antialiasing);
     setFocusPolicy(Qt::NoFocus);
 
-    connect(&m_player,
-            &QMediaPlayer::mediaStatusChanged,
-            this,
-            [this](const QMediaPlayer::MediaStatus status) {
-                if (m_preloading
-                    && (status == QMediaPlayer::BufferingMedia
-                        || status == QMediaPlayer::BufferedMedia)) {
-                    m_preloading = false;
-                    QTimer::singleShot(0, this, [this] { m_player.pause(); });
-                }
-            });
+    const cell<std::optional<QUrl>> uri = video.map([](const OptionalMediaItem &i) {
+        return i ? std::make_optional<QUrl>(QUrl::fromLocalFile(i->resolvedFilePath))
+                 : std::nullopt;
+    });
+    m_player = std::make_unique<VideoPlayer>(uri, sTogglePlayVideo, sStepVideo);
+    m_item = new VideoGraphicsItem(m_player->frame());
+    m_item->rectCallback = [this](const QRectF &r) {
+        scene()->setSceneRect(r);
+        scaleToFit();
+    };
+    scene()->addItem(m_item);
 
-    m_unsubscribe += m_video.listen(
-        ensureSameThread<OptionalMediaItem>(this, &VideoViewer::setItem));
-    m_unsubscribe += sTogglePlayVideo.listen(
-        ensureSameThread<unit>(this, [this](unit) { togglePlayVideo(); }));
-    m_unsubscribe += sStepVideo.listen(ensureSameThread<qint64>(this, &VideoViewer::stepVideo));
+    m_unsubscribe += video.listen(post<OptionalMediaItem>(this, [this](const auto &) {
+        resetTransform();
+        scaleToFit();
+    }));
     m_unsubscribe += sFullscreen.map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
                          .listen(ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape));
 }
-
-void VideoViewer::setItem(const OptionalMediaItem &item)
-{
-    m_item = nullptr;
-    scene()->clear();
-    scene()->setSceneRect({0, 0, 0, 0});
-    resetTransform();
-    m_player.setMedia({});
-
-    if (item) {
-        auto grItem = new QGraphicsVideoItem;
-        QObject::connect(grItem, &QGraphicsVideoItem::nativeSizeChanged, this, &VideoViewer::scaleToFit);
-        m_player.setVideoOutput(grItem);
-        m_player.setMedia(QUrl::fromLocalFile(item->resolvedFilePath));
-        m_item = grItem;
-        scene()->addItem(m_item);
-        scene()->setSceneRect(m_item->boundingRect());
-        scaleToFit();
-        m_preloading = true;
-        m_player.play();
-    }
-}
-
-void VideoViewer::togglePlayVideo()
-{
-    if (m_player.state() != QMediaPlayer::PlayingState)
-        m_player.play();
-    else
-        m_player.pause();
-}
-
-void VideoViewer::stepVideo(qint64 step)
-{
-    qint64 pos = m_player.position() + step;
-    if (pos < 0)
-        pos = 0;
-    if (pos >= m_player.duration())
-        pos = m_player.duration() - 1;
-    m_player.setPosition(pos);
-}
-
 void VideoViewer::scaleToFit()
 {
     m_scalingToFit = true;

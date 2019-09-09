@@ -34,6 +34,7 @@ App::App(QObject *parent)
 
 App::~App()
 {
+    m_window.reset();
     gst_deinit();
 }
 

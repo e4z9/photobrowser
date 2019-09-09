@@ -1,5 +1,6 @@
 #include "thumbnailcreator.h"
 
+#include "gstreamer_utils.h"
 #include "mediadirectorymodel.h"
 
 #include <qtc/runextensions.h>
@@ -144,29 +145,6 @@ void PictureThumbnailer::requestThumbnail(const QString &resolvedFilePath,
                });
 }
 
-class GstElementRef
-{
-public:
-    GstElementRef(GstElement *element)
-        : m_element(element)
-    {}
-    ~GstElementRef()
-    {
-        if (m_cleanup)
-            m_cleanup(m_element);
-        gst_object_unref(m_element);
-    }
-
-    GstElement *operator()() const { return m_element; }
-
-    using CleanUp = std::function<void(GstElement *)>;
-    void setCleanUp(const CleanUp &cleanup) { m_cleanup = cleanup; }
-
-private:
-    GstElement *m_element;
-    CleanUp m_cleanup;
-};
-
 static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
                                  const QString &resolvedFilePath,
                                  const int maxSize)
@@ -216,35 +194,11 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
     g_signal_emit_by_name(sink(), "pull-preroll", &sample, nullptr);
     if (fi.isCanceled())
         return;
-    bool success = false;
-    if (sample) {
-        GstCaps *caps = gst_sample_get_caps(sample);
-        GstStructure *structure = gst_caps_get_structure(caps, 0);
-        int width;
-        int height;
-        success = gst_structure_get_int(structure, "width", &width);
-        success = success | gst_structure_get_int(structure, "height", &height);
-        if (success) {
-            GstBuffer *buffer = gst_sample_get_buffer(sample);
-            GstMapInfo mapInfo;
-            gst_buffer_map(buffer, &mapInfo, GST_MAP_READ);
-            const std::size_t memcount = mapInfo.maxsize * sizeof(gint8);
-            uchar *data = reinterpret_cast<uchar *>(std::malloc(memcount));
-            memcpy(data, mapInfo.data, memcount);
-            QImage img(
-                data,
-                width,
-                height,
-                GST_ROUND_UP_4(width * 3),
-                QImage::Format_RGB888,
-                [](void *d) { std::free(d); },
-                data);
-            fi.reportResult({restrictImageToSize(img, maxSize), duration / GST_MSECOND});
-            gst_buffer_unmap(buffer, &mapInfo);
-        }
-        gst_sample_unref(sample);
-    }
-    if (!success)
+    const std::optional<QImage> image = imageFromGstSample(sample);
+    gst_sample_unref(sample);
+    if (image)
+        fi.reportResult({restrictImageToSize(*image, maxSize), duration / GST_MSECOND});
+    else
         qDebug(logThumb) << "gstreamer: failed to create thumbnail" << resolvedFilePath;
 }
 
