@@ -210,7 +210,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     toggleFullscreen->setMenuRole(QAction::NoRole);
     toggleFullscreen->setShortcut({"Meta+Ctrl+F"});
     // event filter will send new value to m_sFullscreen, so do post
-    toggleFullscreen->sTriggered().listen(post<unit>(this, [this](unit) {
+    m_unsubscribe += toggleFullscreen->sTriggered().listen(post<unit>(this, [this](unit) {
         if (window()->isFullScreen())
             window()->setWindowState(window()->windowState() & ~Qt::WindowFullScreen);
         else

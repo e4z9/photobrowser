@@ -60,6 +60,7 @@ private:
     GstElementRef pipeline;
     GstElementRef source;
     GstElementRef sink;
+    Unsubscribe m_unsubscribe;
 };
 
 static GstBusSyncReply vp_message_cb(GstBus *, GstMessage *m, gpointer player)
@@ -90,17 +91,21 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
             gst_element_set_state(e, GST_STATE_NULL);
     });
     init();
-    uri.listen(post<std::optional<QUrl>>(this, [this](const std::optional<QUrl> &uri) {
-        transaction t;
-        init();
-        state.send(GST_STATE_NULL);
-        frame_sink.send(std::nullopt);
-        if (source())
-            g_object_set(source(), "uri", (uri ? uri->toEncoded().constData() : nullptr), nullptr);
-        if (pipeline() && uri)
-            gst_element_set_state(pipeline(), GST_STATE_PAUSED);
-    }));
-    sStepVideo.listen(post<qint64>(this, [this](qint64 step) {
+    m_unsubscribe += uri.listen(
+        post<std::optional<QUrl>>(this, [this](const std::optional<QUrl> &uri) {
+            transaction t;
+            init();
+            state.send(GST_STATE_NULL);
+            frame_sink.send(std::nullopt);
+            if (source())
+                g_object_set(source(),
+                             "uri",
+                             (uri ? uri->toEncoded().constData() : nullptr),
+                             nullptr);
+            if (pipeline() && uri)
+                gst_element_set_state(pipeline(), GST_STATE_PAUSED);
+        }));
+    m_unsubscribe += sStepVideo.listen(post<qint64>(this, [this](qint64 step) {
         if (!pipeline())
             return;
         gint64 position;
@@ -114,7 +119,8 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                                     position + GST_MSECOND * step);
         }
     }));
-    sTogglePlayVideo.snapshot(state).listen(post<GstState>(this, [this](GstState state) {
+    m_unsubscribe += sTogglePlayVideo.snapshot(state).listen(post<
+                                                             GstState>(this, [this](GstState state) {
         if (pipeline()) {
             if (state == STATE_EOS) {
                 gst_element_seek_simple(pipeline(),
@@ -215,20 +221,22 @@ public:
 private:
     cell<std::optional<QImage>> image;
     QRectF currentRect;
+    Unsubscribe m_unsubscribe;
 };
 
 VideoGraphicsItem::VideoGraphicsItem(const cell<std::optional<QImage>> &image)
     : image(image)
 {
-    this->image.listen(ensureSameThread<std::optional<QImage>>(qApp, [this](const auto &i) {
-        if ((i && QRectF(i->rect()) != currentRect) || (!i && !currentRect.isNull())) {
-            prepareGeometryChange();
-            currentRect = i ? QRectF(i->rect()) : QRectF();
-            if (rectCallback)
-                rectCallback(currentRect);
-        }
-        update();
-    }));
+    m_unsubscribe += this->image.listen(
+        ensureSameThread<std::optional<QImage>>(qApp, [this](const auto &i) {
+            if ((i && QRectF(i->rect()) != currentRect) || (!i && !currentRect.isNull())) {
+                prepareGeometryChange();
+                currentRect = i ? QRectF(i->rect()) : QRectF();
+                if (rectCallback)
+                    rectCallback(currentRect);
+            }
+            update();
+        }));
 }
 
 QRectF VideoGraphicsItem::boundingRect() const
