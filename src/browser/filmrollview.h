@@ -42,13 +42,12 @@ public:
     FilmRollView(const sodium::stream<boost::optional<int>> &sCurrentIndex,
                  const sodium::stream<sodium::unit> &sTogglePlayVideo,
                  const sodium::stream<qint64> &sStepVideo,
-                 const sodium::stream<bool> &sFullscreen);
+                 const sodium::stream<bool> &sFullscreen,
+                 const sodium::stream<qreal> &sScale);
 
     void setModel(QAbstractItemModel *model);
     QAbstractItemModel *model() const;
 
-    void zoomIn();
-    void zoomOut();
     void scaleToFit();
 
     const sodium::cell<boost::optional<int>> &currentIndex() const;

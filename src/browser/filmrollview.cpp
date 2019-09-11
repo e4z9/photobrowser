@@ -59,8 +59,9 @@ static constexpr int MARGIN = 10;
 
 FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
                            const stream<unit> &sTogglePlayVideo,
-                           const sodium::stream<qint64> &sStepVideo,
-                           const sodium::stream<bool> &sFullscreen)
+                           const stream<qint64> &sStepVideo,
+                           const stream<bool> &sFullscreen,
+                           const stream<qreal> &sScale)
     : m_splitter(new FullscreenSplitter(sFullscreen))
     , m_fotoroll(new Fotoroll(sCurrentIndex))
 {
@@ -73,7 +74,7 @@ FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
     m_selectionUpdate->setInterval(80);
     m_selectionUpdate->setSingleShot(true);
 
-    m_imageView = new ImageView(currentItem, sTogglePlayVideo, sStepVideo, sFullscreen);
+    m_imageView = new ImageView(currentItem, sTogglePlayVideo, sStepVideo, sFullscreen, sScale);
 
     m_splitter->setOrientation(Qt::Vertical);
     m_splitter->setWidget(FullscreenSplitter::First, m_imageView);
@@ -94,16 +95,6 @@ void FilmRollView::setModel(QAbstractItemModel *model)
 QAbstractItemModel *FilmRollView::model() const
 {
     return m_fotoroll->model();
-}
-
-void FilmRollView::zoomIn()
-{
-    m_imageView->scale(1.1);
-}
-
-void FilmRollView::zoomOut()
-{
-    m_imageView->scale(.9);
 }
 
 void FilmRollView::scaleToFit()

@@ -25,12 +25,12 @@ public:
     ImageView(const sodium::cell<OptionalMediaItem> &item,
               const sodium::stream<sodium::unit> &sTogglePlayVideo,
               const sodium::stream<qint64> &sStepVideo,
-              const sodium::stream<bool> &sFullscreen);
+              const sodium::stream<bool> &sFullscreen,
+              const sodium::stream<qreal> &sScale);
 
     const sodium::cell<OptionalMediaItem> &item() const;
 
     void scaleToFit();
-    void scale(qreal s);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -40,6 +40,7 @@ private:
     Viewer *currentViewer() const;
 
     sodium::cell<OptionalMediaItem> m_item;
+    sodium::stream_sink<qreal> m_sPinch;
     Unsubscribe m_unsubscribe;
     QTimer m_scaleToFitTimer;
     std::unordered_map<MediaType, Viewer *> m_viewers;
