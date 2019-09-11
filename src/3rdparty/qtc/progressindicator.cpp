@@ -69,10 +69,16 @@
            Very large progress indicator that can be used to cover large parts of a UI.
 */
 
+static void initResource()
+{
+    Q_INIT_RESOURCE(utils);
+}
+
 namespace {
 
 QString imageFileNameForIndicatorSize(Utils::ProgressIndicatorSize size)
 {
+    initResource();
     switch (size) {
     case Utils::ProgressIndicatorSize::Large:
         return QLatin1String(":/utils/images/progressindicator_big.png");
