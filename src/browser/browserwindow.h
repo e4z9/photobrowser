@@ -2,6 +2,7 @@
 
 #include "mediadirectorymodel.h"
 
+#include <sqaction.h>
 #include <sqtools.h>
 
 #include <QMainWindow>
@@ -37,12 +38,13 @@ private:
     sodium::stream_sink<bool> m_sFullscreen;
     FullscreenSplitter *m_splitter = nullptr;
     DirectoryTree *m_fileTree = nullptr;
-    QCheckBox *m_recursive = nullptr;
+    sodium::stream_sink<bool> m_sIsRecursiveFromSettings;
+    sodium::cell<bool> m_isRecursive;
     QAction *m_sortExif = nullptr;
     QAction *m_sortFileName = nullptr;
     QAction *m_sortRandom = nullptr;
     Utils::ProgressIndicator *m_progressIndicator = nullptr;
     QTimer m_progressTimer;
-    MediaDirectoryModel m_model;
+    std::unique_ptr<MediaDirectoryModel> m_model;
     Unsubscribe m_unsubscribe;
 };

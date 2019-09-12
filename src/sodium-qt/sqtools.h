@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QThread>
 
+#include <sodium/sodium.h>
+
 #include <functional>
 #include <vector>
 
@@ -56,3 +58,30 @@ public:
 private:
     std::vector<std::function<void()>> m_unsubs;
 };
+
+template<typename A>
+sodium::stream<A> calm(const sodium::stream<A> &s, const sodium::lazy<boost::optional<A>> &optInit)
+{
+    return sodium::filter_optional(
+        s.collect_lazy(optInit,
+                       [](const A &a, const boost::optional<A> &optLastA)
+                           -> std::tuple<boost::optional<A>, boost::optional<A>> {
+                           if (optLastA && *optLastA == a)
+                               return {{}, optLastA};
+                           return {{a}, {a}};
+                       }));
+}
+
+template<typename A>
+sodium::stream<A> calm(const sodium::stream<A> &s)
+{
+    return calm(s, {});
+}
+
+template<typename A>
+sodium::cell<A> calm(const sodium::cell<A> &a)
+{
+    const auto init = a.sample_lazy();
+    const auto optInit = init.map([](const A &a) -> boost::optional<A> { return a; });
+    return calm(a.updates(), optInit).hold_lazy(init);
+}

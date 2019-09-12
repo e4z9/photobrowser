@@ -2,6 +2,8 @@
 
 #include "thumbnailcreator.h"
 
+#include <sqtools.h>
+
 #include <util/metadatautil.h>
 
 #include <QAbstractItemModel>
@@ -9,6 +11,8 @@
 #include <QFutureWatcher>
 
 #include <optional.h>
+
+#include <sodium/sodium.h>
 
 enum class MediaType { Image, Video };
 
@@ -43,10 +47,10 @@ public:
     enum class Role { Item = Qt::UserRole, Thumbnail };
     enum class SortKey { ExifCreation, FileName, Random };
 
-    MediaDirectoryModel();
+    MediaDirectoryModel(const sodium::cell<bool> &isRecursive);
     ~MediaDirectoryModel() override;
 
-    void setPath(const QString &path, bool recursive);
+    void setPath(const QString &path);
     void moveItemAtIndexToTrash(int index);
     void setSortKey(SortKey key);
     SortKey sortKey() const;
@@ -73,5 +77,6 @@ private:
     mutable ThumbnailCreator m_thumbnailCreator;
     SortKey m_sortKey = SortKey::ExifCreation;
     QString m_path;
-    bool m_isRecursive;
+    sodium::cell<bool> m_isRecursive;
+    Unsubscribe m_unsubscribe;
 };

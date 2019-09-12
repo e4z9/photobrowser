@@ -3,6 +3,8 @@ set(CMAKE_AUTOMOC OFF)
 add_library(sodium-qt STATIC
     sqaction.cpp
     sqaction.h
+    sqcheckbox.cpp
+    sqcheckbox.h
     sqlistview.cpp
     sqlistview.h
     sqtimer.cpp

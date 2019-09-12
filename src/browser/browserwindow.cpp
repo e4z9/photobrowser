@@ -4,6 +4,7 @@
 #include "filmrollview.h"
 #include "fullscreensplitter.h"
 #include "sqaction.h"
+#include "sqcheckbox.h"
 
 #include <util/fileutil.h>
 
@@ -25,12 +26,17 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_splitter(new FullscreenSplitter(m_sFullscreen))
     , m_fileTree(new DirectoryTree)
-    , m_recursive(new QCheckBox(tr("Include Subfolders")))
+    , m_isRecursive(false)
 {
     setCentralWidget(m_splitter);
     m_splitter->setOrientation(Qt::Horizontal);
+    const QString recursiveText = tr("Include Subfolders");
 
     transaction t; // ensure single transaction
+    stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
+    auto recursiveCheckBox = new SQCheckBox(recursiveText, sIsRecursive, true);
+    m_model = std::make_unique<MediaDirectoryModel>(recursiveCheckBox->cChecked());
+
     stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;
     stream_loop<qint64> sStepVideo;
@@ -40,7 +46,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                       sStepVideo,
                                       m_sFullscreen,
                                       sScale);
-    imageView->setModel(&m_model);
+    imageView->setModel(m_model.get());
 
     auto leftWidget = new QWidget;
     auto leftLayout = new QVBoxLayout;
@@ -49,7 +55,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     auto bottomLeftWidget = new QWidget;
     bottomLeftWidget->setLayout(new QVBoxLayout);
-    bottomLeftWidget->layout()->addWidget(m_recursive);
+    bottomLeftWidget->layout()->addWidget(recursiveCheckBox);
 
     leftLayout->addWidget(m_fileTree, 10);
     leftLayout->addWidget(bottomLeftWidget);
@@ -60,13 +66,10 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     setFocusProxy(m_fileTree);
 
-    connect(m_fileTree, &DirectoryTree::currentPathChanged, this, [this](const QString &path) {
-        m_model.setPath(path, m_recursive->isChecked());
-    });
-    connect(m_recursive, &QCheckBox::toggled, this, [this](const bool checked) {
-        m_model.setPath(m_fileTree->currentPath(), checked);
-    });
-    m_model.setPath(m_fileTree->currentPath(), m_recursive->isChecked());
+    connect(m_fileTree,
+            &DirectoryTree::currentPathChanged,
+            m_model.get(),
+            &MediaDirectoryModel::setPath);
 
     m_progressIndicator = new Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Small,
                                                        leftWidget);
@@ -75,11 +78,11 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     m_progressTimer.setInterval(50);
     m_progressTimer.setSingleShot(true);
     connect(&m_progressTimer, &QTimer::timeout, m_progressIndicator, &QWidget::show);
-    connect(&m_model,
+    connect(m_model.get(),
             &MediaDirectoryModel::loadingStarted,
             &m_progressTimer,
             qOverload<>(&QTimer::start));
-    connect(&m_model, &MediaDirectoryModel::loadingFinished, this, [this] {
+    connect(m_model.get(), &MediaDirectoryModel::loadingFinished, this, [this] {
         m_progressTimer.stop();
         m_progressIndicator->hide();
     });
@@ -122,7 +125,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                          .filter(&boost::optional<int>::operator bool)
                                          .map([](const boost::optional<int> &i) { return *i; });
     m_unsubscribe += sMoveToTrash.listen(
-        post<int>(&m_model, &MediaDirectoryModel::moveItemAtIndexToTrash));
+        post<int>(m_model.get(), &MediaDirectoryModel::moveItemAtIndexToTrash));
 
     fileMenu->addAction(revealInFinder);
     fileMenu->addAction(openInDefaultEditor);
@@ -130,29 +133,35 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     fileMenu->addAction(moveToTrash);
 
     // view actions
-    auto viewMenu = menubar->addMenu(tr("Show")); // using "view" adds stupid other actions automatically
+    auto viewMenu = menubar->addMenu(
+        tr("Show")); // using "view" adds stupid other actions automatically
 
-    auto recursive = viewMenu->addAction(m_recursive->text());
+    auto recursive = new SQAction(recursiveText,
+                                  recursiveCheckBox->cChecked().updates(),
+                                  true,
+                                  viewMenu);
     recursive->setCheckable(true);
-    recursive->setChecked(m_recursive->isChecked());
-    connect(m_recursive, &QCheckBox::toggled, recursive, &QAction::setChecked);
-    connect(recursive, &QAction::toggled, m_recursive, &QCheckBox::setChecked);
+    // close the loop
+    sIsRecursive.loop(m_sIsRecursiveFromSettings.or_else(recursive->cChecked().updates()));
+    m_isRecursive = recursive->cChecked();
+
+    viewMenu->addAction(recursive);
 
     auto sortMenu = viewMenu->addMenu(tr("Sort"));
 
     m_sortExif = sortMenu->addAction(tr("Exif/Creation Date"), this, [this] {
-        m_model.setSortKey(MediaDirectoryModel::SortKey::ExifCreation);
+        m_model->setSortKey(MediaDirectoryModel::SortKey::ExifCreation);
     });
     m_sortExif->setCheckable(true);
     m_sortExif->setChecked(true);
 
     m_sortFileName = sortMenu->addAction(tr("File Name"), this, [this] {
-        m_model.setSortKey(MediaDirectoryModel::SortKey::FileName);
+        m_model->setSortKey(MediaDirectoryModel::SortKey::FileName);
     });
     m_sortFileName->setCheckable(true);
 
     m_sortRandom = sortMenu->addAction(tr("Random"), this, [this] {
-        m_model.setSortKey(MediaDirectoryModel::SortKey::Random);
+        m_model->setSortKey(MediaDirectoryModel::SortKey::Random);
     });
     m_sortRandom->setCheckable(true);
 
@@ -275,7 +284,7 @@ void BrowserWindow::restore(QSettings *settings)
             m_sortRandom->setChecked(true);
             break;
         }
-        m_model.setSortKey(sortKey);
+        m_model->setSortKey(sortKey);
     }
     const auto rootPathValue = settings->value(kRootPath);
     if (rootPathValue.isValid())
@@ -283,7 +292,7 @@ void BrowserWindow::restore(QSettings *settings)
     const auto currentPathValue = settings->value(kCurrentPath);
     if (currentPathValue.isValid())
         m_fileTree->setCurrentPath(currentPathValue.toString());
-    m_recursive->setChecked(settings->value(kIncludeSubFolders, false).toBool());
+    m_sIsRecursiveFromSettings.send(settings->value(kIncludeSubFolders, false).toBool());
 }
 
 void BrowserWindow::save(QSettings *settings)
@@ -295,10 +304,10 @@ void BrowserWindow::save(QSettings *settings)
         window()->setWindowState(windowState() & ~Qt::WindowFullScreen);
     settings->setValue(kGeometry, saveGeometry());
     settings->setValue(kWindowState, saveState());
-    settings->setValue(kSortKey, int(m_model.sortKey()));
+    settings->setValue(kSortKey, int(m_model->sortKey()));
     settings->setValue(kRootPath, m_fileTree->rootPath());
     settings->setValue(kCurrentPath, m_fileTree->currentPath());
-    settings->setValue(kIncludeSubFolders, m_recursive->isChecked());
+    settings->setValue(kIncludeSubFolders, m_isRecursive.sample());
 }
 
 bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)

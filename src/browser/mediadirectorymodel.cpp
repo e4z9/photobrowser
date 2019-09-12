@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <random>
 
+using namespace sodium;
+
 namespace {
 
 const QDateTime &createdDateTime(const MediaItem &item)
@@ -111,7 +113,8 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 
 } // namespace
 
-MediaDirectoryModel::MediaDirectoryModel()
+MediaDirectoryModel::MediaDirectoryModel(const cell<bool> &isRecursive)
+    : m_isRecursive(isRecursive)
 {
     connect(&m_thumbnailCreator,
             &ThumbnailCreator::thumbnailReady,
@@ -138,6 +141,10 @@ MediaDirectoryModel::MediaDirectoryModel()
             &QFutureWatcherBase::finished,
             this,
             &MediaDirectoryModel::loadingFinished);
+
+    m_unsubscribe += m_isRecursive.listen(post<bool>(this, [this](bool) {
+        setPath(m_path); /*trigger reload*/
+    }));
 }
 
 MediaDirectoryModel::~MediaDirectoryModel()
@@ -192,11 +199,11 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
     return std::move(items);
 }
 
-void MediaDirectoryModel::setPath(const QString &path, bool recursive)
+void MediaDirectoryModel::setPath(const QString &path)
 {
     cancelAndWait();
     m_path = path;
-    m_isRecursive = recursive;
+    const bool recursive = m_isRecursive.sample();
     beginResetModel();
     m_items.clear();
     endResetModel();
@@ -246,7 +253,7 @@ void MediaDirectoryModel::setSortKey(SortKey key)
     if (m_futureWatcher.isRunning()) {
         // we need to restart the scanning
         cancelAndWait();
-        setPath(m_path, m_isRecursive);
+        setPath(m_path);
         return;
     }
     beginResetModel();
