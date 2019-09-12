@@ -61,7 +61,7 @@ FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
                            const stream<unit> &sTogglePlayVideo,
                            const stream<qint64> &sStepVideo,
                            const stream<bool> &sFullscreen,
-                           const stream<qreal> &sScale)
+                           const stream<std::optional<qreal>> &sScale)
     : m_splitter(new FullscreenSplitter(sFullscreen))
     , m_fotoroll(new Fotoroll(sCurrentIndex))
 {
@@ -95,11 +95,6 @@ void FilmRollView::setModel(QAbstractItemModel *model)
 QAbstractItemModel *FilmRollView::model() const
 {
     return m_fotoroll->model();
-}
-
-void FilmRollView::scaleToFit()
-{
-    m_imageView->scaleToFit();
 }
 
 const sodium::cell<boost::optional<int>> &FilmRollView::currentIndex() const

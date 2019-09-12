@@ -2,9 +2,9 @@
 
 #include "mediadirectorymodel.h"
 
+#include <sqtimer.h>
 #include <sqtools.h>
 
-#include <QTimer>
 #include <QWidget>
 
 #include <optional.h>
@@ -26,23 +26,20 @@ public:
               const sodium::stream<sodium::unit> &sTogglePlayVideo,
               const sodium::stream<qint64> &sStepVideo,
               const sodium::stream<bool> &sFullscreen,
-              const sodium::stream<qreal> &sScale);
+              const sodium::stream<std::optional<qreal>> &sScale);
 
     const sodium::cell<OptionalMediaItem> &item() const;
-
-    void scaleToFit();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     bool event(QEvent *ev) override;
 
 private:
-    Viewer *currentViewer() const;
-
     sodium::cell<OptionalMediaItem> m_item;
-    sodium::stream_sink<qreal> m_sPinch;
+    sodium::stream_sink<std::optional<qreal>> m_sPinch;
+    sodium::stream_sink<sodium::unit> m_sFitAfterResizeRequest;
+    sodium::cell_loop<bool> m_isFittingInView;
     Unsubscribe m_unsubscribe;
-    QTimer m_scaleToFitTimer;
-    std::unordered_map<MediaType, Viewer *> m_viewers;
+    std::unique_ptr<SQTimer> m_scaleToFitTimer;
     QStackedLayout *m_layout;
 };

@@ -34,7 +34,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;
     stream_loop<qint64> sStepVideo;
-    stream_loop<qreal> sScale;
+    stream_loop<std::optional<qreal>> sScale;
     auto imageView = new FilmRollView(sCurrentIndex,
                                       sTogglePlayVideo,
                                       sStepVideo,
@@ -164,20 +164,23 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     auto zoomIn = new SQAction(tr("Zoom In"), viewMenu);
     zoomIn->setShortcut({"+"});
-    const stream<qreal> sZoomIn = zoomIn->sTriggered().map([](unit) { return qreal(1.1); });
+    const auto sZoomIn = zoomIn->sTriggered().map([](unit) -> std::optional<qreal> { return 1.1; });
 
     auto zoomOut = new SQAction(tr("Zoom Out"), viewMenu);
     zoomOut->setShortcut({"-"});
-    const stream<qreal> sZoomOut = zoomOut->sTriggered().map([](unit) { return qreal(0.9); });
+    const auto sZoomOut = zoomOut->sTriggered().map(
+        [](unit) -> std::optional<qreal> { return 0.9; });
 
-    sScale.loop(sZoomIn.or_else(sZoomOut));
+    auto scaleToFit = new SQAction(tr("Scale to Fit"), viewMenu);
+    scaleToFit->setShortcut({"="});
+    const auto sScaleToFit = scaleToFit->sTriggered().map(
+        [](unit) -> std::optional<qreal> { return {}; });
+
+    sScale.loop(sZoomIn.or_else(sZoomOut).or_else(sScaleToFit));
 
     viewMenu->addAction(zoomIn);
     viewMenu->addAction(zoomOut);
-
-    auto scaleToFit = viewMenu->addAction(tr("Scale to Fit"));
-    scaleToFit->setShortcut({"="});
-    connect(scaleToFit, &QAction::triggered, imageView, &FilmRollView::scaleToFit);
+    viewMenu->addAction(scaleToFit);
 
     viewMenu->addSeparator();
 

@@ -43,12 +43,10 @@ public:
                  const sodium::stream<sodium::unit> &sTogglePlayVideo,
                  const sodium::stream<qint64> &sStepVideo,
                  const sodium::stream<bool> &sFullscreen,
-                 const sodium::stream<qreal> &sScale);
+                 const sodium::stream<std::optional<qreal>> &sScale);
 
     void setModel(QAbstractItemModel *model);
     QAbstractItemModel *model() const;
-
-    void scaleToFit();
 
     const sodium::cell<boost::optional<int>> &currentIndex() const;
     const sodium::cell<OptionalMediaItem> &currentItem() const;

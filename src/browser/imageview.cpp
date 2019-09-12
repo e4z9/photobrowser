@@ -28,15 +28,6 @@ static QImage imageForFilePath(const QString &filePath, Util::Orientation orient
     return image.transformed(Util::matrixForOrientation(image.size(), orientation));
 }
 
-class Viewer
-{
-public:
-    virtual ~Viewer() = default;
-
-    virtual void scaleToFit() = 0;
-    virtual bool isScalingToFit() const = 0;
-};
-
 class VideoPlayer : public QObject
 {
 public:
@@ -251,30 +242,26 @@ void VideoGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem 
         painter->drawImage(boundingRect(), *i);
 }
 
-class VideoViewer : public QGraphicsView, public Viewer
+class VideoViewer : public QGraphicsView
 {
 public:
     VideoViewer(const cell<OptionalMediaItem> &video,
                 const stream<unit> &sTogglePlayVideo,
                 const stream<qint64> &sStepVideo,
                 const stream<bool> &sFullscreen,
-                const stream<qreal> &sScale);
-
-    void scaleToFit() override;
-    bool isScalingToFit() const override;
+                const stream<std::optional<qreal>> &sScale);
 
 private:
     Unsubscribe m_unsubscribe;
     VideoGraphicsItem *m_item = nullptr;
     std::unique_ptr<VideoPlayer> m_player;
-    bool m_scalingToFit = false;
 };
 
 VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
                          const stream<unit> &sTogglePlayVideo,
                          const stream<qint64> &sStepVideo,
                          const stream<bool> &sFullscreen,
-                         const stream<qreal> &sScale)
+                         const stream<std::optional<qreal>> &sScale)
 {
     setScene(new QGraphicsScene(this));
     setTransformationAnchor(AnchorUnderMouse);
@@ -291,43 +278,26 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
     m_item = new VideoGraphicsItem(m_player->frame());
     m_item->rectCallback = [this](const QRectF &r) {
         scene()->setSceneRect(r);
-        scaleToFit();
+        fitInView(m_item, Qt::KeepAspectRatio);
     };
     scene()->addItem(m_item);
 
-    m_unsubscribe += video.listen(post<OptionalMediaItem>(this, [this](const auto &) {
-        resetTransform();
-        scaleToFit();
-    }));
     m_unsubscribe += sFullscreen.map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
                          .listen(ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape));
-    m_unsubscribe += sScale.listen([this](qreal s) {
-        m_scalingToFit = false;
-        scale(s, s);
+    m_unsubscribe += sScale.listen([this](const std::optional<qreal> &s) {
+        if (s)
+            scale(*s, *s);
+        else
+            fitInView(m_item, Qt::KeepAspectRatio);
     });
 }
-void VideoViewer::scaleToFit()
-{
-    m_scalingToFit = true;
-    if (!m_item)
-        return;
-    fitInView(m_item, Qt::KeepAspectRatio);
-}
 
-bool VideoViewer::isScalingToFit() const
-{
-    return m_scalingToFit;
-}
-
-class PictureViewer : public QGraphicsView, public Viewer
+class PictureViewer : public QGraphicsView
 {
 public:
     explicit PictureViewer(const cell<OptionalMediaItem> &image,
                            const stream<bool> &sFullscreen,
-                           const stream<qreal> &sScale);
-
-    void scaleToFit() override;
-    bool isScalingToFit() const override;
+                           const stream<std::optional<qreal>> &sScale);
 
 private:
     void clear();
@@ -337,12 +307,11 @@ private:
     Unsubscribe m_unsubscribe;
     QGraphicsItem *m_item = nullptr;
     QFuture<QImage> m_loadingFuture;
-    bool m_scalingToFit = false;
 };
 
 PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image,
                              const stream<bool> &sFullscreen,
-                             const stream<qreal> &sScale)
+                             const stream<std::optional<qreal>> &sScale)
     : m_image(image)
 {
     setScene(new QGraphicsScene(this));
@@ -361,9 +330,13 @@ PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image,
         }));
     m_unsubscribe += sFullscreen.map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
                          .listen(ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape));
-    m_unsubscribe += sScale.listen([this](qreal s) {
-        m_scalingToFit = false;
-        scale(s, s);
+    m_unsubscribe += sScale.listen([this](const std::optional<qreal> &s) {
+        if (!m_item)
+            return;
+        if (s)
+            scale(*s, *s);
+        else
+            fitInView(m_item, Qt::KeepAspectRatio);
     });
 }
 
@@ -386,22 +359,9 @@ void PictureViewer::setItem(const MediaItem &item)
         m_item = item;
         scene()->addItem(m_item);
         scene()->setSceneRect(m_item->boundingRect());
-        scaleToFit();
+        fitInView(m_item, Qt::KeepAspectRatio);
         m_loadingFuture = QFuture<QImage>();
     });
-}
-
-void PictureViewer::scaleToFit()
-{
-    m_scalingToFit = true;
-    if (!m_item)
-        return;
-    fitInView(m_item, Qt::KeepAspectRatio);
-}
-
-bool PictureViewer::isScalingToFit() const
-{
-    return m_scalingToFit;
 }
 
 static std::function<OptionalMediaItem(OptionalMediaItem)> itemIfOfType(MediaType type)
@@ -413,7 +373,7 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
                      const stream<unit> &sTogglePlayVideo,
                      const stream<qint64> &sStepVideo,
                      const stream<bool> &sFullscreen,
-                     const stream<qreal> &sScale)
+                     const stream<std::optional<qreal>> &sScale)
     : m_item(item)
     , m_layout(new QStackedLayout)
 {
@@ -423,15 +383,24 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
     const cell<bool> hasImage = optImage.map(&isMediaItem);
     const cell<bool> hasVideo = optVideo.map(&isMediaItem);
 
-    auto pictureViewer = new PictureViewer(optImage,
-                                           sFullscreen,
-                                           sScale.or_else(m_sPinch).gate(hasImage));
+    m_scaleToFitTimer = std::make_unique<SQTimer>(m_sFitAfterResizeRequest.gate(m_isFittingInView));
+    m_scaleToFitTimer->setSingleShot(true);
+    m_scaleToFitTimer->setInterval(50);
+    const auto sFitAfterResize = m_scaleToFitTimer->sTimeout().map(
+        [](unit) -> std::optional<qreal> { return {}; });
+
+    const auto sScaleCombined = sScale.or_else(m_sPinch).or_else(sFitAfterResize);
+    const auto sScaleIsFit = sScaleCombined.map([](const auto &s) { return !bool(s); });
+    const auto sItemUpdated = item.updates().map([](const auto &) { return true; });
+    m_isFittingInView.loop(sScaleIsFit.or_else(sItemUpdated).hold(true));
+
+    auto pictureViewer = new PictureViewer(optImage, sFullscreen, sScaleCombined.gate(hasImage));
 
     auto videoViewer = new VideoViewer(optVideo,
                                        sTogglePlayVideo.gate(hasVideo),
                                        sStepVideo.gate(hasVideo),
                                        sFullscreen,
-                                       sScale.or_else(m_sPinch).gate(hasImage));
+                                       sScaleCombined.gate(hasVideo));
 
     auto noViewer = new QWidget;
     m_layout->addWidget(pictureViewer);
@@ -455,23 +424,10 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);
 
-    m_viewers.insert({MediaType::Image, pictureViewer});
-    m_viewers.insert({MediaType::Video, videoViewer});
-
     setFocusPolicy(Qt::NoFocus);
 
     grabGesture(Qt::PinchGesture);
     installEventFilter(this);
-
-    m_scaleToFitTimer.setSingleShot(true);
-    m_scaleToFitTimer.setInterval(50);
-    connect(&m_scaleToFitTimer, &QTimer::timeout, this, &ImageView::scaleToFit);
-}
-
-void ImageView::scaleToFit()
-{
-    if (Viewer *viewer = currentViewer())
-        viewer->scaleToFit();
 }
 
 bool ImageView::eventFilter(QObject *watched, QEvent *event)
@@ -487,17 +443,7 @@ bool ImageView::eventFilter(QObject *watched, QEvent *event)
 
 bool ImageView::event(QEvent *ev)
 {
-    if (ev->type() == QEvent::Resize) {
-        if (currentViewer() && currentViewer()->isScalingToFit())
-            m_scaleToFitTimer.start();
-    }
+    if (ev->type() == QEvent::Resize)
+        m_sFitAfterResizeRequest.send({});
     return QWidget::event(ev);
-}
-
-Viewer *ImageView::currentViewer() const
-{
-    const int index = m_layout->currentIndex();
-    if (index >= int(m_viewers.size())) // wrong...
-        return nullptr;
-    return m_viewers.at(MediaType(index));
 }
