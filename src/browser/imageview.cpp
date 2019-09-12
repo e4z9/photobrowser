@@ -116,7 +116,7 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                                     GST_FORMAT_TIME,
                                     GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT
                                                  | snapOption),
-                                    position + GST_MSECOND * step);
+                                    std::max(0ll, position + GST_MSECOND * step));
         }
     }));
     m_unsubscribe += sTogglePlayVideo.snapshot(state).listen(post<
