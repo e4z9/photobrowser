@@ -39,6 +39,9 @@ Q_DECLARE_METATYPE(MediaItem)
 QString durationToString(const qint64 durationMs);
 QString sizeToString(const qint64 size);
 
+DEFINE_BOOL_TYPE(VideosOnly)
+DEFINE_BOOL_TYPE(IsRecursive)
+
 class MediaDirectoryModel : public QAbstractItemModel
 {
     Q_OBJECT
@@ -47,7 +50,8 @@ public:
     enum class Role { Item = Qt::UserRole, Thumbnail };
     enum class SortKey { ExifCreation, FileName, Random };
 
-    MediaDirectoryModel(const sodium::cell<bool> &isRecursive, const sodium::cell<bool> &videosOnly);
+    MediaDirectoryModel(const sodium::cell<IsRecursive> &isRecursive,
+                        const sodium::cell<VideosOnly> &videosOnly);
     ~MediaDirectoryModel() override;
 
     void setPath(const QString &path);
@@ -77,7 +81,7 @@ private:
     mutable ThumbnailCreator m_thumbnailCreator;
     SortKey m_sortKey = SortKey::ExifCreation;
     QString m_path;
-    sodium::cell<bool> m_isRecursive;
-    sodium::cell<bool> m_videosOnly;
+    sodium::cell<IsRecursive> m_isRecursive;
+    sodium::cell<VideosOnly> m_videosOnly;
     Unsubscribe m_unsubscribe;
 };

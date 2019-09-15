@@ -112,7 +112,8 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 
 } // namespace
 
-MediaDirectoryModel::MediaDirectoryModel(const cell<bool> &isRecursive, const cell<bool> &videosOnly)
+MediaDirectoryModel::MediaDirectoryModel(const cell<IsRecursive> &isRecursive,
+                                         const cell<VideosOnly> &videosOnly)
     : m_isRecursive(isRecursive)
     , m_videosOnly(videosOnly)
 {
@@ -142,10 +143,10 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<bool> &isRecursive, const ce
             this,
             &MediaDirectoryModel::loadingFinished);
 
-    m_unsubscribe += m_isRecursive.listen(post<bool>(this, [this](bool) {
+    m_unsubscribe += m_isRecursive.listen(post<IsRecursive>(this, [this](IsRecursive) {
         setPath(m_path); /*trigger reload*/
     }));
-    m_unsubscribe += m_videosOnly.listen(post<bool>(this, [this](bool) {
+    m_unsubscribe += m_videosOnly.listen(post<VideosOnly>(this, [this](VideosOnly) {
         setPath(m_path); /*trigger reload*/
     }));
 }
@@ -167,7 +168,7 @@ static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &typ
 
 static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList> &fi,
                                const QString &path,
-                               bool videosOnly)
+                               VideosOnly videosOnly)
 {
     // scraped from https://cgit.freedesktop.org/xdg/shared-mime-info/plain/freedesktop.org.xml.in
     static QList<QByteArray> videoMimeTypes = {"video/x-flv",
@@ -240,15 +241,15 @@ void MediaDirectoryModel::setPath(const QString &path)
 {
     cancelAndWait();
     m_path = path;
-    const bool recursive = m_isRecursive.sample();
-    const bool videosOnly = m_videosOnly.sample();
+    const IsRecursive recursive = m_isRecursive.sample();
+    const VideosOnly showOption = m_videosOnly.sample();
     beginResetModel();
     m_items.clear();
     endResetModel();
     emit loadingStarted();
     m_futureWatcher.setFuture(Utils::runAsync(
-        [sortKey = m_sortKey, path, videosOnly, recursive](QFutureInterface<ResultList> &fi) {
-            MediaItems results = collectItems(fi, path, videosOnly);
+        [sortKey = m_sortKey, path, showOption, recursive](QFutureInterface<ResultList> &fi) {
+            MediaItems results = collectItems(fi, path, showOption);
             if (fi.isCanceled())
                 return;
             arrange(results, sortKey);
@@ -262,7 +263,7 @@ void MediaDirectoryModel::setPath(const QString &path)
                     if (fi.isCanceled())
                         break;
                     const QString dir = it.next();
-                    MediaItems dirResults = collectItems(fi, dir, videosOnly);
+                    MediaItems dirResults = collectItems(fi, dir, showOption);
                     arrange(dirResults, sortKey);
                     const ResultList resultList = addArranged(sortKey, results, dirResults);
                     if (!fi.isCanceled() && !resultList.empty())

@@ -82,8 +82,10 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto recursiveCheckBox = new SQCheckBox(recursiveText, sIsRecursive, true);
     stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
     auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText, sVideosOnly, true);
-    m_model = std::make_unique<MediaDirectoryModel>(recursiveCheckBox->cChecked(),
-                                                    videosOnlyCheckbox->cChecked());
+
+    const auto cIsRecursive = recursiveCheckBox->cChecked().map(&IsRecursive::fromBool);
+    const auto cVideosOnly = videosOnlyCheckbox->cChecked().map(&VideosOnly::fromBool);
+    m_model = std::make_unique<MediaDirectoryModel>(cIsRecursive, cVideosOnly);
 
     stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;

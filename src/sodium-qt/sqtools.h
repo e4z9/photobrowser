@@ -85,3 +85,18 @@ sodium::cell<A> calm(const sodium::cell<A> &a)
     const auto optInit = init.map([](const A &a) -> boost::optional<A> { return a; });
     return calm(a.updates(), optInit).hold_lazy(init);
 }
+
+#define DEFINE_BOOL_TYPE(type) \
+    class type \
+    { \
+    public: \
+        type(bool b) \
+            : value(b) \
+        {} \
+        operator bool() const { return value; } \
+        bool toBool() { return value; } \
+        static type fromBool(bool b) { return b; } \
+\
+    private: \
+        bool value; \
+    };
