@@ -40,6 +40,8 @@ private:
     DirectoryTree *m_fileTree = nullptr;
     sodium::stream_sink<bool> m_sIsRecursiveFromSettings;
     sodium::cell<bool> m_isRecursive;
+    sodium::stream_sink<bool> m_sVideosOnlyFromSettings;
+    sodium::cell<bool> m_videosOnly;
     QAction *m_sortExif = nullptr;
     QAction *m_sortFileName = nullptr;
     QAction *m_sortRandom = nullptr;

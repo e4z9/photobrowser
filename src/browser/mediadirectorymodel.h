@@ -47,7 +47,7 @@ public:
     enum class Role { Item = Qt::UserRole, Thumbnail };
     enum class SortKey { ExifCreation, FileName, Random };
 
-    MediaDirectoryModel(const sodium::cell<bool> &isRecursive);
+    MediaDirectoryModel(const sodium::cell<bool> &isRecursive, const sodium::cell<bool> &videosOnly);
     ~MediaDirectoryModel() override;
 
     void setPath(const QString &path);
@@ -78,5 +78,6 @@ private:
     SortKey m_sortKey = SortKey::ExifCreation;
     QString m_path;
     sodium::cell<bool> m_isRecursive;
+    sodium::cell<bool> m_videosOnly;
     Unsubscribe m_unsubscribe;
 };

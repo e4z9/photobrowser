@@ -113,8 +113,9 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 
 } // namespace
 
-MediaDirectoryModel::MediaDirectoryModel(const cell<bool> &isRecursive)
+MediaDirectoryModel::MediaDirectoryModel(const cell<bool> &isRecursive, const cell<bool> &videosOnly)
     : m_isRecursive(isRecursive)
+    , m_videosOnly(videosOnly)
 {
     connect(&m_thumbnailCreator,
             &ThumbnailCreator::thumbnailReady,
@@ -145,6 +146,9 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<bool> &isRecursive)
     m_unsubscribe += m_isRecursive.listen(post<bool>(this, [this](bool) {
         setPath(m_path); /*trigger reload*/
     }));
+    m_unsubscribe += m_videosOnly.listen(post<bool>(this, [this](bool) {
+        setPath(m_path); /*trigger reload*/
+    }));
 }
 
 MediaDirectoryModel::~MediaDirectoryModel()
@@ -163,7 +167,8 @@ static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &typ
 }
 
 static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList> &fi,
-                               const QString &path)
+                               const QString &path,
+                               bool videosOnly)
 {
     const QDir dir(path);
     const auto entryList = dir.entryInfoList(QDir::Files);
@@ -179,12 +184,15 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
         if (mimeType.name() == "inode/directory")
             continue;
         MediaType type;
-        if (containsMimeType(supported, mimeType))
+        if (containsMimeType(supported, mimeType)) {
+            if (videosOnly)
+                continue;
             type = MediaType::Image;
-        else if (QMediaPlayer::hasSupport(mimeType.name()))
+        } else if (QMediaPlayer::hasSupport(mimeType.name())) {
             type = MediaType::Video;
-        else
+        } else {
             continue;
+        }
         QFileInfo fi(resolvedFilePath);
         const auto metaData = Util::metaData(resolvedFilePath);
         items.push_back({entry.fileName(),
@@ -204,13 +212,14 @@ void MediaDirectoryModel::setPath(const QString &path)
     cancelAndWait();
     m_path = path;
     const bool recursive = m_isRecursive.sample();
+    const bool videosOnly = m_videosOnly.sample();
     beginResetModel();
     m_items.clear();
     endResetModel();
     emit loadingStarted();
-    m_futureWatcher.setFuture(
-        Utils::runAsync([sortKey = m_sortKey, path, recursive](QFutureInterface<ResultList> &fi) {
-            MediaItems results = collectItems(fi, path);
+    m_futureWatcher.setFuture(Utils::runAsync(
+        [sortKey = m_sortKey, path, videosOnly, recursive](QFutureInterface<ResultList> &fi) {
+            MediaItems results = collectItems(fi, path, videosOnly);
             if (fi.isCanceled())
                 return;
             arrange(results, sortKey);
@@ -224,7 +233,7 @@ void MediaDirectoryModel::setPath(const QString &path)
                     if (fi.isCanceled())
                         break;
                     const QString dir = it.next();
-                    MediaItems dirResults = collectItems(fi, dir);
+                    MediaItems dirResults = collectItems(fi, dir, videosOnly);
                     arrange(dirResults, sortKey);
                     const ResultList resultList = addArranged(sortKey, results, dirResults);
                     if (!fi.isCanceled() && !resultList.empty())

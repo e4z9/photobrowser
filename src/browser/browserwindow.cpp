@@ -27,15 +27,20 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     , m_splitter(new FullscreenSplitter(m_sFullscreen))
     , m_fileTree(new DirectoryTree)
     , m_isRecursive(false)
+    , m_videosOnly(false)
 {
     setCentralWidget(m_splitter);
     m_splitter->setOrientation(Qt::Horizontal);
     const QString recursiveText = tr("Include Subfolders");
+    const QString videosOnlyText = tr("Videos Only");
 
     transaction t; // ensure single transaction
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
     auto recursiveCheckBox = new SQCheckBox(recursiveText, sIsRecursive, true);
-    m_model = std::make_unique<MediaDirectoryModel>(recursiveCheckBox->cChecked());
+    stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
+    auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText, sVideosOnly, true);
+    m_model = std::make_unique<MediaDirectoryModel>(recursiveCheckBox->cChecked(),
+                                                    videosOnlyCheckbox->cChecked());
 
     stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;
@@ -56,6 +61,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto bottomLeftWidget = new QWidget;
     bottomLeftWidget->setLayout(new QVBoxLayout);
     bottomLeftWidget->layout()->addWidget(recursiveCheckBox);
+    bottomLeftWidget->layout()->addWidget(videosOnlyCheckbox);
 
     leftLayout->addWidget(m_fileTree, 10);
     leftLayout->addWidget(bottomLeftWidget);
@@ -145,7 +151,17 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     sIsRecursive.loop(m_sIsRecursiveFromSettings.or_else(recursive->cChecked().updates()));
     m_isRecursive = recursive->cChecked();
 
+    auto videosOnly = new SQAction(videosOnlyText,
+                                   videosOnlyCheckbox->cChecked().updates(),
+                                   true,
+                                   viewMenu);
+    videosOnly->setCheckable(true);
+    // close the loop
+    sVideosOnly.loop(m_sVideosOnlyFromSettings.or_else(videosOnly->cChecked().updates()));
+    m_videosOnly = videosOnly->cChecked();
+
     viewMenu->addAction(recursive);
+    viewMenu->addAction(videosOnly);
 
     auto sortMenu = viewMenu->addMenu(tr("Sort"));
 
@@ -263,6 +279,7 @@ const char kSortKey[] = "SortKey";
 const char kRootPath[] = "RootPath";
 const char kCurrentPath[] = "CurrentPath";
 const char kIncludeSubFolders[] = "IncludeSubFolders";
+const char kVideosOnly[] = "VideosOnly";
 
 void BrowserWindow::restore(QSettings *settings)
 {
@@ -293,6 +310,7 @@ void BrowserWindow::restore(QSettings *settings)
     if (currentPathValue.isValid())
         m_fileTree->setCurrentPath(currentPathValue.toString());
     m_sIsRecursiveFromSettings.send(settings->value(kIncludeSubFolders, false).toBool());
+    m_sVideosOnlyFromSettings.send(settings->value(kVideosOnly, false).toBool());
 }
 
 void BrowserWindow::save(QSettings *settings)
@@ -308,6 +326,7 @@ void BrowserWindow::save(QSettings *settings)
     settings->setValue(kRootPath, m_fileTree->rootPath());
     settings->setValue(kCurrentPath, m_fileTree->currentPath());
     settings->setValue(kIncludeSubFolders, m_isRecursive.sample());
+    settings->setValue(kVideosOnly, m_videosOnly.sample());
 }
 
 bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
