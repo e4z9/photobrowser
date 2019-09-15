@@ -2,7 +2,6 @@
 
 #include <util/metadatautil.h>
 
-#include <QAbstractVideoSurface>
 #include <QFutureWatcher>
 
 #include <deque>

@@ -7,7 +7,6 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QImageReader>
-#include <QMediaPlayer>
 #include <QMimeDatabase>
 
 #include <algorithm>
@@ -170,6 +169,36 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                                const QString &path,
                                bool videosOnly)
 {
+    // scraped from https://cgit.freedesktop.org/xdg/shared-mime-info/plain/freedesktop.org.xml.in
+    static QList<QByteArray> videoMimeTypes = {"video/x-flv",
+                                               "application/x-matroska",
+                                               "video/x-matroska",
+                                               "video/webm",
+                                               "application/mxf",
+                                               "video/annodex",
+                                               "video/ogg",
+                                               "video/x-theora+ogg",
+                                               "video/x-ogm+ogg",
+                                               "video/mp4",
+                                               "video/3gpp",
+                                               "video/3gpp2",
+                                               "video/vnd.rn-realvideo",
+                                               "video/x-mjpeg",
+                                               "video/mj2",
+                                               "video/dv",
+                                               "video/isivideo",
+                                               "video/mpeg",
+                                               "video/vnd.mpegurl",
+                                               "video/quicktime",
+                                               "video/vnd.vivo",
+                                               "video/wavelet",
+                                               "video/x-anim",
+                                               "video/x-flic",
+                                               "video/x-mng",
+                                               "video/x-ms-wmv",
+                                               "video/x-msvideo",
+                                               "video/x-nsv",
+                                               "video/x-sgi-movie"};
     const QDir dir(path);
     const auto entryList = dir.entryInfoList(QDir::Files);
     MediaItems items;
@@ -188,7 +217,7 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
             if (videosOnly)
                 continue;
             type = MediaType::Image;
-        } else if (QMediaPlayer::hasSupport(mimeType.name())) {
+        } else if (containsMimeType(videoMimeTypes, mimeType)) {
             type = MediaType::Video;
         } else {
             continue;
