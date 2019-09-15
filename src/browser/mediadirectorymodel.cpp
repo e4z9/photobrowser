@@ -429,8 +429,10 @@ QString sizeToString(const qint64 size)
 QString MediaItem::windowTitle() const
 {
     const QDateTime dt = metaData.created ? *(metaData.created) : created;
-    return QCoreApplication::translate("MediaItem", "%1 - %2")
-        .arg(fileName, dt.toString(Qt::SystemLocaleLongDate));
+    return QCoreApplication::translate("MediaItem", "%1%2 - %3")
+        .arg(fileName,
+             metaData.duration ? (" - " + durationToString(*metaData.duration)) : QString(),
+             dt.toString(Qt::SystemLocaleLongDate));
 }
 
 bool isMediaItem(const OptionalMediaItem &item)
