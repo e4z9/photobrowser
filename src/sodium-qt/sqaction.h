@@ -19,6 +19,8 @@ public:
              QObject *parent = nullptr);
 
     const sodium::stream<sodium::unit> &sTriggered() const;
+
+    const sodium::stream<bool> sChecked() const;
     const sodium::cell<bool> &cChecked() const;
 
 private:

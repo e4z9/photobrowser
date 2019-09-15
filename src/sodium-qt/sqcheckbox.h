@@ -15,6 +15,7 @@ public:
                const sodium::stream<bool> &sChecked,
                const sodium::cell<bool> &enabled);
 
+    const sodium::stream<bool> sChecked() const;
     const sodium::cell<bool> &cChecked() const;
 
 private:

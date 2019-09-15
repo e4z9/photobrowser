@@ -187,23 +187,17 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto viewMenu = menubar->addMenu(
         tr("Show")); // using "view" adds stupid other actions automatically
 
-    auto recursive = new SQAction(recursiveText,
-                                  recursiveCheckBox->cChecked().updates(),
-                                  true,
-                                  viewMenu);
+    auto recursive = new SQAction(recursiveText, recursiveCheckBox->sChecked(), true, viewMenu);
     recursive->setCheckable(true);
     // close the loop
     const auto sRestoreRecursive = m_settings.add(kIncludeSubFolders, recursive->cChecked());
-    sIsRecursive.loop(sRestoreRecursive.or_else(recursive->cChecked().updates()));
+    sIsRecursive.loop(sRestoreRecursive.or_else(recursive->sChecked()));
 
-    auto videosOnly = new SQAction(videosOnlyText,
-                                   videosOnlyCheckbox->cChecked().updates(),
-                                   true,
-                                   viewMenu);
+    auto videosOnly = new SQAction(videosOnlyText, videosOnlyCheckbox->sChecked(), true, viewMenu);
     videosOnly->setCheckable(true);
     // close the loop
     const auto sRestoreVideosOnly = m_settings.add(kVideosOnly, videosOnly->cChecked());
-    sVideosOnly.loop(sRestoreVideosOnly.or_else(videosOnly->cChecked().updates()));
+    sVideosOnly.loop(sRestoreVideosOnly.or_else(videosOnly->sChecked()));
 
     viewMenu->addAction(recursive);
     viewMenu->addAction(videosOnly);

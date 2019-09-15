@@ -34,6 +34,11 @@ const sodium::stream<unit> &SQAction::sTriggered() const
     return m_sTriggered;
 }
 
+const stream<bool> SQAction::sChecked() const
+{
+    return m_isChecked.updates();
+}
+
 const sodium::cell<bool> &SQAction::cChecked() const
 {
     return m_isChecked;

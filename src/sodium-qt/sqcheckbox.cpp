@@ -26,6 +26,11 @@ SQCheckBox::SQCheckBox(const sodium::cell<QString> &text,
         post<bool>(this, [this](bool) { setChecked(m_isChecked.sample()); }));
 }
 
+const stream<bool> SQCheckBox::sChecked() const
+{
+    return m_isChecked.updates();
+}
+
 const sodium::cell<bool> &SQCheckBox::cChecked() const
 {
     return m_isChecked;
