@@ -60,6 +60,186 @@ void Settings::save(QSettings *s)
         s->setValue(setting.key, setting.value.sample());
 }
 
+QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
+                                     const cell<boost::optional<int>> &currentIndex)
+{
+    auto fileMenu = new QMenu(BrowserWindow::tr("File"));
+
+    const cell<bool> anyItemSelected = currentItem.map(&isMediaItem);
+    const cell<bool> videoItemSelected = currentItem.map(
+        [](const OptionalMediaItem &i) { return i && i->type == MediaType::Video; });
+    const auto snapshotItemFilePath = [&currentItem](const stream<unit> &s) {
+        return s.snapshot(currentItem)
+            .filter(&OptionalMediaItem::operator bool)
+            .map([](const OptionalMediaItem &i) { return i->filePath; });
+    };
+
+    auto revealInFinder = new SQAction(BrowserWindow::tr("Reveal in Finder"),
+                                       anyItemSelected,
+                                       fileMenu);
+    revealInFinder->setShortcut({"o"});
+    const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->sTriggered());
+    m_unsubscribe += sReveal.listen(post<QString>(this, &Util::revealInFinder));
+
+    auto openInDefaultEditor = new SQAction(BrowserWindow::tr("Open in Default Editor"),
+                                            anyItemSelected,
+                                            fileMenu);
+    openInDefaultEditor->setShortcut({"ctrl+o"});
+    const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered())
+                                         .map(&QUrl::fromLocalFile);
+    m_unsubscribe += sOpenEditor.listen(post<QUrl>(this, &QDesktopServices::openUrl));
+
+    auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
+    moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
+    const stream<int> sMoveToTrash = moveToTrash->sTriggered()
+                                         .snapshot(currentIndex)
+                                         .filter(&boost::optional<int>::operator bool)
+                                         .map([](const boost::optional<int> &i) { return *i; });
+    m_unsubscribe += sMoveToTrash.listen(
+        post<int>(m_model.get(), &MediaDirectoryModel::moveItemAtIndexToTrash));
+
+    fileMenu->addAction(revealInFinder);
+    fileMenu->addAction(openInDefaultEditor);
+    fileMenu->addSeparator();
+    fileMenu->addAction(moveToTrash);
+    return fileMenu;
+}
+
+struct SortMenu
+{
+    QMenu *menu;
+    cell<MediaDirectoryModel::SortKey> cSortKey;
+};
+
+static SortMenu createSortMenu(stream<MediaDirectoryModel::SortKey> sRestoreSortKey)
+{
+    auto sortMenu = new QMenu(BrowserWindow::tr("Sort"));
+
+    stream_loop<bool> sSortExifChecked;
+    auto sortExif = new SQAction(BrowserWindow::tr("Exif/Creation Date"),
+                                 sSortExifChecked,
+                                 true,
+                                 sortMenu);
+    sortExif->setCheckable(true);
+    sortExif->setChecked(true);
+    const auto sSortExif = sortExif->sTriggered().map_to(MediaDirectoryModel::SortKey::ExifCreation);
+
+    stream_loop<bool> sSortFileNameChecked;
+    auto sortFileName = new SQAction(BrowserWindow::tr("File Name"),
+                                     sSortFileNameChecked,
+                                     true,
+                                     sortMenu);
+    sortFileName->setCheckable(true);
+    const auto sSortFileName = sortFileName->sTriggered().map_to(
+        MediaDirectoryModel::SortKey::FileName);
+
+    stream_loop<bool> sSortRandomChecked;
+    auto sortRandom = new SQAction(BrowserWindow::tr("Random"), sSortRandomChecked, true, sortMenu);
+    sortRandom->setCheckable(true);
+    const auto sSortRandom = sortRandom->sTriggered().map_to(MediaDirectoryModel::SortKey::Random);
+
+    auto sortKeyGroup = new QActionGroup(sortMenu);
+    for (auto action : std::vector<QAction *>{sortExif, sortFileName, sortRandom})
+        sortKeyGroup->addAction(action);
+
+    const auto cSortKey = sRestoreSortKey.or_else(sSortExif)
+                              .or_else(sSortFileName)
+                              .or_else(sSortRandom)
+                              .hold(MediaDirectoryModel::SortKey::ExifCreation);
+    sSortExifChecked.loop(sRestoreSortKey.map(
+        [](auto k) { return k == MediaDirectoryModel::SortKey::ExifCreation; }));
+    sSortFileNameChecked.loop(
+        sRestoreSortKey.map([](auto k) { return k == MediaDirectoryModel::SortKey::FileName; }));
+    sSortRandomChecked.loop(
+        sRestoreSortKey.map([](auto k) { return k == MediaDirectoryModel::SortKey::Random; }));
+
+    sortMenu->addAction(sortExif);
+    sortMenu->addAction(sortFileName);
+    sortMenu->addAction(sortRandom);
+    return {sortMenu, cSortKey};
+}
+
+static stream<std::optional<qreal>> addScaleItems(QMenu *viewMenu)
+{
+    auto zoomIn = new SQAction(BrowserWindow::tr("Zoom In"), viewMenu);
+    zoomIn->setShortcut({"+"});
+    const auto sZoomIn = zoomIn->sTriggered().map([](unit) -> std::optional<qreal> { return 1.1; });
+
+    auto zoomOut = new SQAction(BrowserWindow::tr("Zoom Out"), viewMenu);
+    zoomOut->setShortcut({"-"});
+    const auto sZoomOut = zoomOut->sTriggered().map(
+        [](unit) -> std::optional<qreal> { return 0.9; });
+
+    auto scaleToFit = new SQAction(BrowserWindow::tr("Scale to Fit"), viewMenu);
+    scaleToFit->setShortcut({"="});
+    const auto sScaleToFit = scaleToFit->sTriggered().map(
+        [](unit) -> std::optional<qreal> { return {}; });
+
+    viewMenu->addAction(zoomIn);
+    viewMenu->addAction(zoomOut);
+    viewMenu->addAction(scaleToFit);
+
+    return sZoomIn.or_else(sZoomOut).or_else(sScaleToFit);
+}
+
+static stream<boost::optional<int>> addNavigationItems(
+    const cell<boost::optional<int>> &currentIndex, QMenu *viewMenu)
+{
+    const auto stepIndex = [](int step) {
+        return [step](const boost::optional<int> &i) -> boost::optional<int> {
+            return i ? (*i + step) : 0;
+        };
+    };
+    auto previousItem = new SQAction(BrowserWindow::tr("Previous"), viewMenu);
+    previousItem->setShortcut({"Left"});
+    const stream<boost::optional<int>> sPrevious
+        = previousItem->sTriggered().snapshot(currentIndex).map(stepIndex(-1));
+
+    auto nextItem = new SQAction(BrowserWindow::tr("Next"), viewMenu);
+    nextItem->setShortcut({"Right"});
+    const stream<boost::optional<int>> sNext
+        = nextItem->sTriggered().snapshot(currentIndex).map(stepIndex(+1));
+
+    viewMenu->addAction(previousItem);
+    viewMenu->addAction(nextItem);
+
+    return sPrevious.or_else(sNext);
+}
+
+struct VideoMenu
+{
+    QMenu *menu;
+    stream<unit> sPlayStop;
+    stream<qint64> sStep;
+};
+
+static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *parent)
+{
+    // video actions
+    auto videoMenu = new QMenu(BrowserWindow::tr("Video"), parent);
+
+    auto playStop = new SQAction(BrowserWindow::tr("Play/Pause"), videoItemSelected, videoMenu);
+    playStop->setShortcut({"Space"});
+
+    auto stepForward = new SQAction(BrowserWindow::tr("Step Forward"), videoItemSelected, videoMenu);
+    stepForward->setShortcut({"."});
+    const stream<qint64> sForward = stepForward->sTriggered().map(
+        [](unit) { return qint64(10000); });
+
+    auto stepBackward = new SQAction(BrowserWindow::tr("Step Backward"),
+                                     videoItemSelected,
+                                     videoMenu);
+    stepBackward->setShortcut({","});
+    const stream<qint64> sBackward = stepBackward->sTriggered().map(
+        [](unit) { return qint64(-10000); });
+
+    videoMenu->addAction(playStop);
+    videoMenu->addAction(stepForward);
+    videoMenu->addAction(stepBackward);
+
+    return {videoMenu, playStop->sTriggered(), sForward.or_else(sBackward)};
+}
+
 BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_splitter(new FullscreenSplitter(m_sFullscreen))
@@ -141,41 +321,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     m_unsubscribe += title.listen(ensureSameThread<QString>(this, &QWidget::setWindowTitle));
 
     // file actions
-    auto fileMenu = menubar->addMenu(tr("File"));
-
-    const cell<bool> anyItemSelected = imageView->currentItem().map(&isMediaItem);
-    const cell<bool> videoItemSelected = imageView->currentItem().map(
-        [](const OptionalMediaItem &i) { return i && i->type == MediaType::Video; });
-    const auto snapshotItemFilePath = [imageView](const stream<unit> &s) {
-        return s.snapshot(imageView->currentItem())
-            .filter(&OptionalMediaItem::operator bool)
-            .map([](const OptionalMediaItem &i) { return i->filePath; });
-    };
-
-    auto revealInFinder = new SQAction(tr("Reveal in Finder"), anyItemSelected, fileMenu);
-    revealInFinder->setShortcut({"o"});
-    const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->sTriggered());
-    m_unsubscribe += sReveal.listen(post<QString>(this, &Util::revealInFinder));
-
-    auto openInDefaultEditor = new SQAction(tr("Open in Default Editor"), anyItemSelected, fileMenu);
-    openInDefaultEditor->setShortcut({"ctrl+o"});
-    const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered())
-                                         .map(&QUrl::fromLocalFile);
-    m_unsubscribe += sOpenEditor.listen(post<QUrl>(this, &QDesktopServices::openUrl));
-
-    auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
-    moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
-    const stream<int> sMoveToTrash = moveToTrash->sTriggered()
-                                         .snapshot(imageView->currentIndex())
-                                         .filter(&boost::optional<int>::operator bool)
-                                         .map([](const boost::optional<int> &i) { return *i; });
-    m_unsubscribe += sMoveToTrash.listen(
-        post<int>(m_model.get(), &MediaDirectoryModel::moveItemAtIndexToTrash));
-
-    fileMenu->addAction(revealInFinder);
-    fileMenu->addAction(openInDefaultEditor);
-    fileMenu->addSeparator();
-    fileMenu->addAction(moveToTrash);
+    menubar->addMenu(createFileMenu(imageView->currentItem(), imageView->currentIndex()));
 
     // view actions
     auto viewMenu = menubar->addMenu(
@@ -196,89 +342,20 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     viewMenu->addAction(recursive);
     viewMenu->addAction(videosOnly);
 
-    auto sortMenu = viewMenu->addMenu(tr("Sort"));
-
-    stream_loop<bool> sSortExifChecked;
-    auto sortExif = new SQAction(tr("Exif/Creation Date"), sSortExifChecked, true, sortMenu);
-    sortExif->setCheckable(true);
-    sortExif->setChecked(true);
-    const auto sSortExif = sortExif->sTriggered().map_to(MediaDirectoryModel::SortKey::ExifCreation);
-
-    stream_loop<bool> sSortFileNameChecked;
-    auto sortFileName = new SQAction(tr("File Name"), sSortFileNameChecked, true, sortMenu);
-    sortFileName->setCheckable(true);
-    const auto sSortFileName = sortFileName->sTriggered().map_to(
-        MediaDirectoryModel::SortKey::FileName);
-
-    stream_loop<bool> sSortRandomChecked;
-    auto sortRandom = new SQAction(tr("Random"), sSortRandomChecked, true, sortMenu);
-    sortRandom->setCheckable(true);
-    const auto sSortRandom = sortRandom->sTriggered().map_to(MediaDirectoryModel::SortKey::Random);
-
-    auto sortKeyGroup = new QActionGroup(sortMenu);
-    for (auto action : std::vector<QAction *>{sortExif, sortFileName, sortRandom})
-        sortKeyGroup->addAction(action);
-
     stream_loop<MediaDirectoryModel::SortKey> sRestoreSortKey;
-    cSortKey.loop(sRestoreSortKey.or_else(sSortExif)
-                      .or_else(sSortFileName)
-                      .or_else(sSortRandom)
-                      .hold(MediaDirectoryModel::SortKey::ExifCreation));
+    const auto sortMenu = createSortMenu(sRestoreSortKey);
+    cSortKey.loop(sortMenu.cSortKey);
     sRestoreSortKey.loop(m_settings.addInt(kSortKey, cSortKey));
-    sSortExifChecked.loop(sRestoreSortKey.map(
-        [](auto k) { return k == MediaDirectoryModel::SortKey::ExifCreation; }));
-    sSortFileNameChecked.loop(
-        sRestoreSortKey.map([](auto k) { return k == MediaDirectoryModel::SortKey::FileName; }));
-    sSortRandomChecked.loop(
-        sRestoreSortKey.map([](auto k) { return k == MediaDirectoryModel::SortKey::Random; }));
-
-    sortMenu->addAction(sortExif);
-    sortMenu->addAction(sortFileName);
-    sortMenu->addAction(sortRandom);
+    viewMenu->addMenu(sortMenu.menu);
 
     viewMenu->addSeparator();
 
-    auto zoomIn = new SQAction(tr("Zoom In"), viewMenu);
-    zoomIn->setShortcut({"+"});
-    const auto sZoomIn = zoomIn->sTriggered().map([](unit) -> std::optional<qreal> { return 1.1; });
-
-    auto zoomOut = new SQAction(tr("Zoom Out"), viewMenu);
-    zoomOut->setShortcut({"-"});
-    const auto sZoomOut = zoomOut->sTriggered().map(
-        [](unit) -> std::optional<qreal> { return 0.9; });
-
-    auto scaleToFit = new SQAction(tr("Scale to Fit"), viewMenu);
-    scaleToFit->setShortcut({"="});
-    const auto sScaleToFit = scaleToFit->sTriggered().map(
-        [](unit) -> std::optional<qreal> { return {}; });
-
-    sScale.loop(sZoomIn.or_else(sZoomOut).or_else(sScaleToFit));
-
-    viewMenu->addAction(zoomIn);
-    viewMenu->addAction(zoomOut);
-    viewMenu->addAction(scaleToFit);
+    sScale.loop(addScaleItems(viewMenu));
 
     viewMenu->addSeparator();
 
-    const auto stepIndex = [](int step) {
-        return [step](const boost::optional<int> &i) -> boost::optional<int> {
-            return i ? (*i + step) : 0;
-        };
-    };
-    auto previousItem = new SQAction(tr("Previous"), viewMenu);
-    previousItem->setShortcut({"Left"});
-    const stream<boost::optional<int>> sPrevious
-        = previousItem->sTriggered().snapshot(imageView->currentIndex()).map(stepIndex(-1));
+    sCurrentIndex.loop(addNavigationItems(imageView->currentIndex(), viewMenu));
 
-    auto nextItem = new SQAction(tr("Next"), viewMenu);
-    nextItem->setShortcut({"Right"});
-    const stream<boost::optional<int>> sNext
-        = nextItem->sTriggered().snapshot(imageView->currentIndex()).map(stepIndex(+1));
-
-    sCurrentIndex.loop(sPrevious.or_else(sNext));
-
-    viewMenu->addAction(previousItem);
-    viewMenu->addAction(nextItem);
     viewMenu->addSeparator();
 
     const cell<bool> fullscreen = m_sFullscreen.hold(false);
@@ -298,28 +375,12 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     viewMenu->addAction(toggleFullscreen);
 
-    // video actions
-    auto videoMenu = menubar->addMenu(tr("Video"));
-
-    auto playStop = new SQAction(tr("Play/Pause"), videoItemSelected, videoMenu);
-    playStop->setShortcut({"Space"});
-    sTogglePlayVideo.loop(playStop->sTriggered());
-
-    auto stepForward = new SQAction(tr("Step Forward"), videoItemSelected, videoMenu);
-    stepForward->setShortcut({"."});
-    const stream<qint64> sForward = stepForward->sTriggered().map(
-        [](unit) { return qint64(10000); });
-
-    auto stepBackward = new SQAction(tr("Step Backward"), videoItemSelected, videoMenu);
-    stepBackward->setShortcut({","});
-    const stream<qint64> sBackward = stepBackward->sTriggered().map(
-        [](unit) { return qint64(-10000); });
-
-    sStepVideo.loop(sForward.or_else(sBackward));
-
-    videoMenu->addAction(playStop);
-    videoMenu->addAction(stepForward);
-    videoMenu->addAction(stepBackward);
+    const cell<bool> videoItemSelected = imageView->currentItem().map(
+        [](const OptionalMediaItem &i) { return i && i->type == MediaType::Video; });
+    const auto videoMenu = createVideoMenu(videoItemSelected, menubar);
+    menubar->addMenu(videoMenu.menu);
+    sTogglePlayVideo.loop(videoMenu.sPlayStop);
+    sStepVideo.loop(videoMenu.sStep);
 
     window()->installEventFilter(this);
 }

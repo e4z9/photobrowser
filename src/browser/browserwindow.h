@@ -57,6 +57,8 @@ public:
 
 private:
     void adaptProgressIndicator();
+    QMenu *createFileMenu(const sodium::cell<OptionalMediaItem> &currentItem,
+                          const sodium::cell<boost::optional<int>> &currentIndex);
 
     Settings m_settings;
     sodium::stream_sink<bool> m_sFullscreen;
