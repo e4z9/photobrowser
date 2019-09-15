@@ -113,9 +113,11 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 } // namespace
 
 MediaDirectoryModel::MediaDirectoryModel(const cell<IsRecursive> &isRecursive,
-                                         const cell<VideosOnly> &videosOnly)
+                                         const cell<VideosOnly> &videosOnly,
+                                         const cell<SortKey> &sortKey)
     : m_isRecursive(isRecursive)
     , m_videosOnly(videosOnly)
+    , m_sortKey(sortKey)
 {
     connect(&m_thumbnailCreator,
             &ThumbnailCreator::thumbnailReady,
@@ -149,6 +151,7 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<IsRecursive> &isRecursive,
     m_unsubscribe += m_videosOnly.listen(post<VideosOnly>(this, [this](VideosOnly) {
         setPath(m_path); /*trigger reload*/
     }));
+    m_unsubscribe += m_sortKey.listen(post<SortKey>(this, [this](SortKey key) { setSortKey(key); }));
 }
 
 MediaDirectoryModel::~MediaDirectoryModel()
@@ -243,12 +246,13 @@ void MediaDirectoryModel::setPath(const QString &path)
     m_path = path;
     const IsRecursive recursive = m_isRecursive.sample();
     const VideosOnly showOption = m_videosOnly.sample();
+    const SortKey sortKey = m_sortKey.sample();
     beginResetModel();
     m_items.clear();
     endResetModel();
     emit loadingStarted();
-    m_futureWatcher.setFuture(Utils::runAsync(
-        [sortKey = m_sortKey, path, showOption, recursive](QFutureInterface<ResultList> &fi) {
+    m_futureWatcher.setFuture(
+        Utils::runAsync([sortKey, path, showOption, recursive](QFutureInterface<ResultList> &fi) {
             MediaItems results = collectItems(fi, path, showOption);
             if (fi.isCanceled())
                 return;
@@ -288,7 +292,6 @@ void MediaDirectoryModel::moveItemAtIndexToTrash(int i)
 
 void MediaDirectoryModel::setSortKey(SortKey key)
 {
-    m_sortKey = key;
     if (m_futureWatcher.isRunning()) {
         // we need to restart the scanning
         cancelAndWait();
@@ -301,11 +304,6 @@ void MediaDirectoryModel::setSortKey(SortKey key)
     else
         std::sort(m_items.begin(), m_items.end(), itemLessThan(key));
     endResetModel();
-}
-
-MediaDirectoryModel::SortKey MediaDirectoryModel::sortKey() const
-{
-    return m_sortKey;
 }
 
 QModelIndex MediaDirectoryModel::index(int row, int column, const QModelIndex &parent) const

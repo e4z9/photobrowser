@@ -51,13 +51,12 @@ public:
     enum class SortKey { ExifCreation, FileName, Random };
 
     MediaDirectoryModel(const sodium::cell<IsRecursive> &isRecursive,
-                        const sodium::cell<VideosOnly> &videosOnly);
+                        const sodium::cell<VideosOnly> &videosOnly,
+                        const sodium::cell<SortKey> &sortKey);
     ~MediaDirectoryModel() override;
 
     void setPath(const QString &path);
     void moveItemAtIndexToTrash(int index);
-    void setSortKey(SortKey key);
-    SortKey sortKey() const;
 
 signals:
     void loadingStarted();
@@ -73,15 +72,16 @@ public:
     using ResultList = std::vector<std::pair<int, MediaItems>>;
 
 private:
+    void setSortKey(SortKey key);
     void insertItems(int index, const MediaItems &items);
     void cancelAndWait();
 
     MediaItems m_items;
     QFutureWatcher<ResultList> m_futureWatcher;
     mutable ThumbnailCreator m_thumbnailCreator;
-    SortKey m_sortKey = SortKey::ExifCreation;
     QString m_path;
     sodium::cell<IsRecursive> m_isRecursive;
     sodium::cell<VideosOnly> m_videosOnly;
+    sodium::cell<SortKey> m_sortKey;
     Unsubscribe m_unsubscribe;
 };

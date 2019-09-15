@@ -23,7 +23,10 @@ namespace Utils { class ProgressIndicator; }
 class Settings
 {
 public:
-    const sodium::stream<bool> add(const QByteArray &key, const sodium::cell<bool> &value);
+    template<typename T>
+    const sodium::stream<T> add(const QByteArray &key, const sodium::cell<T> &value);
+    template<typename T>
+    const sodium::stream<T> addInt(const QByteArray &key, const sodium::cell<T> &value);
     const sodium::stream<QVariant> add(const QByteArray &key, const sodium::cell<QVariant> &value);
 
     void restore(QSettings *s);
@@ -59,11 +62,22 @@ private:
     sodium::stream_sink<bool> m_sFullscreen;
     FullscreenSplitter *m_splitter = nullptr;
     DirectoryTree *m_fileTree = nullptr;
-    QAction *m_sortExif = nullptr;
-    QAction *m_sortFileName = nullptr;
-    QAction *m_sortRandom = nullptr;
     Utils::ProgressIndicator *m_progressIndicator = nullptr;
     QTimer m_progressTimer;
     std::unique_ptr<MediaDirectoryModel> m_model;
     Unsubscribe m_unsubscribe;
 };
+
+template<typename T>
+const sodium::stream<T> Settings::add(const QByteArray &key, const sodium::cell<T> &value)
+{
+    return add(key, value.map([](const T &t) -> QVariant { return qVariantFromValue(t); }))
+        .map([](const QVariant &v) { return v.value<T>(); });
+}
+
+template<typename T>
+const sodium::stream<T> Settings::addInt(const QByteArray &key, const sodium::cell<T> &value)
+{
+    return add(key, value.map([](const T &t) -> QVariant { return int(t); }))
+        .map([](const QVariant &v) { return T(v.toInt()); });
+}

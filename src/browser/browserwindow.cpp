@@ -35,13 +35,6 @@ Settings::Setting::Setting(const QByteArray &key, const cell<QVariant> &value)
     , value(value)
 {}
 
-const sodium::stream<bool> Settings::add(const QByteArray &key, const cell<bool> &value)
-{
-    return add(key, value.map([](bool b) -> QVariant { return b; })).map([](const QVariant &v) {
-        return v.toBool();
-    });
-}
-
 const stream<QVariant> Settings::add(const QByteArray &key, const cell<QVariant> &value)
 {
     Setting setting(key, value);
@@ -85,7 +78,8 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     const auto cIsRecursive = recursiveCheckBox->cChecked().map(&IsRecursive::fromBool);
     const auto cVideosOnly = videosOnlyCheckbox->cChecked().map(&VideosOnly::fromBool);
-    m_model = std::make_unique<MediaDirectoryModel>(cIsRecursive, cVideosOnly);
+    cell_loop<MediaDirectoryModel::SortKey> cSortKey;
+    m_model = std::make_unique<MediaDirectoryModel>(cIsRecursive, cVideosOnly, cSortKey);
 
     stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;
@@ -204,25 +198,43 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     auto sortMenu = viewMenu->addMenu(tr("Sort"));
 
-    m_sortExif = sortMenu->addAction(tr("Exif/Creation Date"), this, [this] {
-        m_model->setSortKey(MediaDirectoryModel::SortKey::ExifCreation);
-    });
-    m_sortExif->setCheckable(true);
-    m_sortExif->setChecked(true);
+    stream_loop<bool> sSortExifChecked;
+    auto sortExif = new SQAction(tr("Exif/Creation Date"), sSortExifChecked, true, sortMenu);
+    sortExif->setCheckable(true);
+    sortExif->setChecked(true);
+    const auto sSortExif = sortExif->sTriggered().map_to(MediaDirectoryModel::SortKey::ExifCreation);
 
-    m_sortFileName = sortMenu->addAction(tr("File Name"), this, [this] {
-        m_model->setSortKey(MediaDirectoryModel::SortKey::FileName);
-    });
-    m_sortFileName->setCheckable(true);
+    stream_loop<bool> sSortFileNameChecked;
+    auto sortFileName = new SQAction(tr("File Name"), sSortFileNameChecked, true, sortMenu);
+    sortFileName->setCheckable(true);
+    const auto sSortFileName = sortFileName->sTriggered().map_to(
+        MediaDirectoryModel::SortKey::FileName);
 
-    m_sortRandom = sortMenu->addAction(tr("Random"), this, [this] {
-        m_model->setSortKey(MediaDirectoryModel::SortKey::Random);
-    });
-    m_sortRandom->setCheckable(true);
+    stream_loop<bool> sSortRandomChecked;
+    auto sortRandom = new SQAction(tr("Random"), sSortRandomChecked, true, sortMenu);
+    sortRandom->setCheckable(true);
+    const auto sSortRandom = sortRandom->sTriggered().map_to(MediaDirectoryModel::SortKey::Random);
 
     auto sortKeyGroup = new QActionGroup(sortMenu);
-    for (auto action : std::vector<QAction *>{m_sortExif, m_sortFileName, m_sortRandom})
+    for (auto action : std::vector<QAction *>{sortExif, sortFileName, sortRandom})
         sortKeyGroup->addAction(action);
+
+    stream_loop<MediaDirectoryModel::SortKey> sRestoreSortKey;
+    cSortKey.loop(sRestoreSortKey.or_else(sSortExif)
+                      .or_else(sSortFileName)
+                      .or_else(sSortRandom)
+                      .hold(MediaDirectoryModel::SortKey::ExifCreation));
+    sRestoreSortKey.loop(m_settings.addInt(kSortKey, cSortKey));
+    sSortExifChecked.loop(sRestoreSortKey.map(
+        [](auto k) { return k == MediaDirectoryModel::SortKey::ExifCreation; }));
+    sSortFileNameChecked.loop(
+        sRestoreSortKey.map([](auto k) { return k == MediaDirectoryModel::SortKey::FileName; }));
+    sSortRandomChecked.loop(
+        sRestoreSortKey.map([](auto k) { return k == MediaDirectoryModel::SortKey::Random; }));
+
+    sortMenu->addAction(sortExif);
+    sortMenu->addAction(sortFileName);
+    sortMenu->addAction(sortRandom);
 
     viewMenu->addSeparator();
 
@@ -318,22 +330,6 @@ void BrowserWindow::restore(QSettings *settings)
         return;
     restoreGeometry(settings->value(kGeometry).toByteArray());
     restoreState(settings->value(kWindowState).toByteArray());
-    const auto sortKeyValue = settings->value(kSortKey);
-    if (sortKeyValue.isValid() && sortKeyValue.canConvert<int>()) {
-        const auto sortKey = MediaDirectoryModel::SortKey(sortKeyValue.toInt());
-        switch (sortKey) {
-        case MediaDirectoryModel::SortKey::ExifCreation:
-            m_sortExif->setChecked(true);
-            break;
-        case MediaDirectoryModel::SortKey::FileName:
-            m_sortFileName->setChecked(true);
-            break;
-        case MediaDirectoryModel::SortKey::Random:
-            m_sortRandom->setChecked(true);
-            break;
-        }
-        m_model->setSortKey(sortKey);
-    }
     const auto rootPathValue = settings->value(kRootPath);
     if (rootPathValue.isValid())
         m_fileTree->setRootPath(rootPathValue.toString());
@@ -352,7 +348,6 @@ void BrowserWindow::save(QSettings *settings)
         window()->setWindowState(windowState() & ~Qt::WindowFullScreen);
     settings->setValue(kGeometry, saveGeometry());
     settings->setValue(kWindowState, saveState());
-    settings->setValue(kSortKey, int(m_model->sortKey()));
     settings->setValue(kRootPath, m_fileTree->rootPath());
     settings->setValue(kCurrentPath, m_fileTree->currentPath());
     m_settings.save(settings);
