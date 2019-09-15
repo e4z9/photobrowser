@@ -160,13 +160,14 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
                              .constData(),
                          &error));
     if (error != nullptr) {
-        qDebug(logThumb) << "gstreamer: failed to create pipeline \"" << error->message << "\"";
+        qWarning(logThumb) << "gstreamer: failed to create pipeline \"" << error->message << "\"";
         g_error_free(error);
         return;
     }
     GstElementRef sink(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
     if (fi.isCanceled())
         return;
+    pipeline.setCleanUp([](GstElement *e) { gst_element_set_state(e, GST_STATE_NULL); });
     GstStateChangeReturn stateChange = gst_element_set_state(pipeline(), GST_STATE_PAUSED);
     bool pauseFailed = stateChange == GST_STATE_CHANGE_FAILURE
                        || stateChange == GST_STATE_CHANGE_NO_PREROLL;
@@ -175,10 +176,9 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
         pauseFailed = stateChange == GST_STATE_CHANGE_FAILURE;
     }
     if (pauseFailed) {
-        qDebug(logThumb) << "gstreamer: cannot play file" << resolvedFilePath;
+        qWarning(logThumb) << "gstreamer: cannot play file" << resolvedFilePath;
         return;
     }
-    pipeline.setCleanUp([](GstElement *e) { gst_element_set_state(e, GST_STATE_NULL); });
     if (fi.isCanceled())
         return;
     gint64 duration;
@@ -199,7 +199,7 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
     if (image)
         fi.reportResult({restrictImageToSize(*image, maxSize), duration / GST_MSECOND});
     else
-        qDebug(logThumb) << "gstreamer: failed to create thumbnail" << resolvedFilePath;
+        qWarning(logThumb) << "gstreamer: failed to create thumbnail" << resolvedFilePath;
 }
 
 class VideoThumbnailer : public Thumbnailer
