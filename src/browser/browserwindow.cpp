@@ -22,12 +22,55 @@
 
 using namespace sodium;
 
+const char kGeometry[] = "Geometry";
+const char kWindowState[] = "WindowState";
+const char kSortKey[] = "SortKey";
+const char kRootPath[] = "RootPath";
+const char kCurrentPath[] = "CurrentPath";
+const char kIncludeSubFolders[] = "IncludeSubFolders";
+const char kVideosOnly[] = "VideosOnly";
+
+Settings::Setting::Setting(const QByteArray &key, const cell<QVariant> &value)
+    : key(key)
+    , value(value)
+{}
+
+const sodium::stream<bool> Settings::add(const QByteArray &key, const cell<bool> &value)
+{
+    return add(key, value.map([](bool b) -> QVariant { return b; })).map([](const QVariant &v) {
+        return v.toBool();
+    });
+}
+
+const stream<QVariant> Settings::add(const QByteArray &key, const cell<QVariant> &value)
+{
+    Setting setting(key, value);
+    m_settings.push_back(setting);
+    return setting.sRestore;
+}
+
+void Settings::restore(QSettings *s)
+{
+    if (!s)
+        return;
+    for (const auto &setting : m_settings) {
+        if (s->contains(setting.key))
+            setting.sRestore.send(s->value(setting.key));
+    }
+}
+
+void Settings::save(QSettings *s)
+{
+    if (!s)
+        return;
+    for (const auto &setting : m_settings)
+        s->setValue(setting.key, setting.value.sample());
+}
+
 BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_splitter(new FullscreenSplitter(m_sFullscreen))
     , m_fileTree(new DirectoryTree)
-    , m_isRecursive(false)
-    , m_videosOnly(false)
 {
     setCentralWidget(m_splitter);
     m_splitter->setOrientation(Qt::Horizontal);
@@ -148,8 +191,8 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                   viewMenu);
     recursive->setCheckable(true);
     // close the loop
-    sIsRecursive.loop(m_sIsRecursiveFromSettings.or_else(recursive->cChecked().updates()));
-    m_isRecursive = recursive->cChecked();
+    const auto sRestoreRecursive = m_settings.add(kIncludeSubFolders, recursive->cChecked());
+    sIsRecursive.loop(sRestoreRecursive.or_else(recursive->cChecked().updates()));
 
     auto videosOnly = new SQAction(videosOnlyText,
                                    videosOnlyCheckbox->cChecked().updates(),
@@ -157,8 +200,8 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                    viewMenu);
     videosOnly->setCheckable(true);
     // close the loop
-    sVideosOnly.loop(m_sVideosOnlyFromSettings.or_else(videosOnly->cChecked().updates()));
-    m_videosOnly = videosOnly->cChecked();
+    const auto sRestoreVideosOnly = m_settings.add(kVideosOnly, videosOnly->cChecked());
+    sVideosOnly.loop(sRestoreVideosOnly.or_else(videosOnly->cChecked().updates()));
 
     viewMenu->addAction(recursive);
     viewMenu->addAction(videosOnly);
@@ -273,14 +316,6 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     window()->installEventFilter(this);
 }
 
-const char kGeometry[] = "Geometry";
-const char kWindowState[] = "WindowState";
-const char kSortKey[] = "SortKey";
-const char kRootPath[] = "RootPath";
-const char kCurrentPath[] = "CurrentPath";
-const char kIncludeSubFolders[] = "IncludeSubFolders";
-const char kVideosOnly[] = "VideosOnly";
-
 void BrowserWindow::restore(QSettings *settings)
 {
     if (!settings)
@@ -309,8 +344,7 @@ void BrowserWindow::restore(QSettings *settings)
     const auto currentPathValue = settings->value(kCurrentPath);
     if (currentPathValue.isValid())
         m_fileTree->setCurrentPath(currentPathValue.toString());
-    m_sIsRecursiveFromSettings.send(settings->value(kIncludeSubFolders, false).toBool());
-    m_sVideosOnlyFromSettings.send(settings->value(kVideosOnly, false).toBool());
+    m_settings.restore(settings);
 }
 
 void BrowserWindow::save(QSettings *settings)
@@ -325,8 +359,7 @@ void BrowserWindow::save(QSettings *settings)
     settings->setValue(kSortKey, int(m_model->sortKey()));
     settings->setValue(kRootPath, m_fileTree->rootPath());
     settings->setValue(kCurrentPath, m_fileTree->currentPath());
-    settings->setValue(kIncludeSubFolders, m_isRecursive.sample());
-    settings->setValue(kVideosOnly, m_videosOnly.sample());
+    m_settings.save(settings);
 }
 
 bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
