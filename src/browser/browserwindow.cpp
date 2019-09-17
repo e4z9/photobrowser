@@ -358,7 +358,7 @@ bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_progressIndicator->parentWidget() && event->type() == QEvent::Resize) {
         adaptProgressIndicator();
     } else if (watched == window() && event->type() == QEvent::WindowStateChange) {
-        m_sFullscreen.send(isFullScreen());
+        post(this, [this] { m_sFullscreen.send(isFullScreen()); });
     }
     return QWidget::eventFilter(watched, event);
 }

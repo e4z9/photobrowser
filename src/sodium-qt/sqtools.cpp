@@ -13,3 +13,10 @@ Unsubscribe::~Unsubscribe()
             unsub();
     }
 }
+
+void post(QObject *guard, const std::function<void()> &action)
+
+{
+    QMetaObject::invokeMethod(
+        guard, [action] { action(); }, Qt::QueuedConnection);
+}

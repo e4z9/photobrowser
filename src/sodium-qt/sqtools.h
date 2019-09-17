@@ -37,6 +37,8 @@ std::function<void(A)> post(QObject *guard, const std::function<void(A)> &action
     };
 }
 
+void post(QObject *guard, const std::function<void()> &action);
+
 template<typename A, typename B, typename C>
 std::function<void(A)> post(B *guard, void (C::*f)(A))
 {

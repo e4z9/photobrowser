@@ -156,7 +156,7 @@ void VideoPlayer::fetchPreroll()
     const std::optional<QImage> image = imageFromGstSample(sample);
     gst_sample_unref(sample);
     if (image) // locking of send can interfere with locking of setting GST_STATE_NULL
-        QMetaObject::invokeMethod(this, [this, image] { frame_sink.send(image); });
+        post(this, [this, image] { frame_sink.send(image); });
 }
 
 void VideoPlayer::fetchNewSample()
@@ -168,7 +168,7 @@ void VideoPlayer::fetchNewSample()
     const std::optional<QImage> image = imageFromGstSample(sample);
     gst_sample_unref(sample);
     if (image) // locking of send can interfere with locking of setting GST_STATE_NULL
-        QMetaObject::invokeMethod(this, [this, image] { frame_sink.send(image); });
+        post(this, [this, image] { frame_sink.send(image); });
 }
 
 void VideoPlayer::init()
@@ -435,7 +435,7 @@ bool ImageView::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::Gesture) {
         auto ge = static_cast<QGestureEvent *>(event);
         if (auto pg = static_cast<QPinchGesture *>(ge->gesture(Qt::PinchGesture)))
-            m_sPinch.send(pg->scaleFactor());
+            post(this, [this, sf = pg->scaleFactor()] { m_sPinch.send(sf); });
         return true;
     }
     return QWidget::eventFilter(watched, event);
@@ -443,7 +443,8 @@ bool ImageView::eventFilter(QObject *watched, QEvent *event)
 
 bool ImageView::event(QEvent *ev)
 {
-    if (ev->type() == QEvent::Resize)
-        m_sFitAfterResizeRequest.send({});
+    if (ev->type() == QEvent::Resize) {
+        post(this, [this] { m_sFitAfterResizeRequest.send({}); });
+    }
     return QWidget::event(ev);
 }
