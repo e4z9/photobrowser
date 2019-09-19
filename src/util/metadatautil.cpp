@@ -36,7 +36,7 @@ static std::optional<QPixmap> extractExifThumbnail(const Exiv2::ExifData &exifDa
             Util::matrixForOrientation(pixmap.size(), orientation));
         if (rotatedPixmap.size().width() == 0 || rotatedPixmap.height() == 0
             || imageDimensions.width() == 0 || imageDimensions.height() == 0) {
-            return rotatedPixmap;
+            return {rotatedPixmap};
         }
         // potentially cut left/right
         const int widthFromHeight = rotatedPixmap.height() * imageDimensions.width()
@@ -55,13 +55,13 @@ static std::optional<QPixmap> extractExifThumbnail(const Exiv2::ExifData &exifDa
         const int targetHeight = heightFromWidth < rotatedPixmap.height() ? heightFromWidth
                                                                           : rotatedPixmap.height();
         if (xoffset == 0 && yoffset == 0)
-            return rotatedPixmap;
+            return {rotatedPixmap};
         QPixmap cutPixmap(targetWidth, targetHeight);
         QPainter painter(&cutPixmap);
         painter.drawPixmap(QPoint(0, 0),
                            rotatedPixmap,
                            QRect(xoffset, yoffset, targetWidth, targetHeight));
-        return cutPixmap;
+        return {cutPixmap};
     }
     return {};
 }
