@@ -43,13 +43,14 @@ private:
     std::vector<Setting> m_settings;
 };
 
-class SProgressIndicator : public Utils::ProgressIndicator
+class PI : public Utils::ProgressIndicator
 {
 public:
-    SProgressIndicator(Utils::ProgressIndicatorSize size, const sodium::cell<bool> &visible);
-private:
-    Unsubscribe m_unsubscribe;
+    PI()
+        : Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Small)
+    {}
 };
+using SProgressIndicator = SQWidgetWrapper<PI>;
 
 class BrowserWindow : public QMainWindow
 {

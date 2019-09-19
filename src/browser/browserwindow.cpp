@@ -58,13 +58,6 @@ void Settings::save(QSettings *s)
         s->setValue(setting.key, setting.value.sample());
 }
 
-SProgressIndicator::SProgressIndicator(Utils::ProgressIndicatorSize size,
-                                       const sodium::cell<bool> &visible)
-    : ProgressIndicator(size)
-{
-    m_unsubscribe += visible.listen(ensureSameThread<bool>(this, [this](bool v) { setVisible(v); }));
-}
-
 QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
                                      const cell<boost::optional<int>> &currentIndex)
 {
@@ -306,12 +299,11 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                                 m_model->sLoadingFinished());
     m_progressTimer->setInterval(50);
     m_progressTimer->setSingleShot(true);
-    m_progressIndicator = new SProgressIndicator(Utils::ProgressIndicatorSize::Small,
-                                                 m_progressTimer->sTimeout()
-                                                     .map_to(true)
-                                                     .or_else(
-                                                         m_model->sLoadingFinished().map_to(false))
-                                                     .hold(false));
+    m_progressIndicator = new SProgressIndicator(
+        m_progressTimer->sTimeout()
+            .map_to(true)
+            .or_else(m_model->sLoadingFinished().map_to(false))
+            .hold(false));
     m_progressIndicator->setParent(leftWidget);
     adaptProgressIndicator();
 

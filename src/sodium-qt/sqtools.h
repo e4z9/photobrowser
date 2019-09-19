@@ -61,6 +61,29 @@ private:
     std::vector<std::function<void()>> m_unsubs;
 };
 
+template<typename T>
+class SQWidgetWrapper : public T
+{
+public:
+    SQWidgetWrapper();
+    SQWidgetWrapper(const sodium::cell<bool> &visible);
+
+private:
+    Unsubscribe m_unsubscribe;
+};
+
+template<typename T>
+SQWidgetWrapper<T>::SQWidgetWrapper()
+    : SQWidgetWrapper(true)
+{}
+
+template<typename T>
+SQWidgetWrapper<T>::SQWidgetWrapper(const sodium::cell<bool> &visible)
+{
+    m_unsubscribe += visible.listen(
+        ensureSameThread<bool>(this, [this](bool v) { T::setVisible(v); }));
+}
+
 template<typename A>
 sodium::stream<A> calm(const sodium::stream<A> &s, const sodium::lazy<boost::optional<A>> &optInit)
 {
