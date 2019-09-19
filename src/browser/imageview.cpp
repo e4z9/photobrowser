@@ -9,8 +9,10 @@
 #include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QGuiApplication>
+#include <QLabel>
 #include <QLoggingCategory>
 #include <QStackedLayout>
+#include <QStyle>
 
 #include <QCoreApplication>
 #include <QThread>
@@ -37,6 +39,7 @@ public:
     ~VideoPlayer() override = default;
 
     const cell<std::optional<QImage>> frame() const;
+    const cell<bool> &isPlaying() const;
 
     // internal
     GstBusSyncReply message_cb(GstMessage *message);
@@ -48,6 +51,7 @@ private:
     const int STATE_EOS = GST_STATE_PLAYING + 1;
     cell_sink<GstState> state;
     cell_sink<std::optional<QImage>> frame_sink;
+    const cell<bool> m_isPlaying;
     GstElementRef pipeline;
     GstElementRef source;
     GstElementRef sink;
@@ -76,6 +80,7 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                          const stream<qint64> &sStepVideo)
     : state(GST_STATE_NULL)
     , frame_sink(std::nullopt)
+    , m_isPlaying(state.map([](GstState s) { return s == GST_STATE_PLAYING; }))
 {
     pipeline.setCleanUp([](GstElement *e) {
         if (e)
@@ -110,26 +115,32 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                                     std::max(0ll, position + GST_MSECOND * step));
         }
     }));
-    m_unsubscribe += sTogglePlayVideo.snapshot(state).listen(post<
-                                                             GstState>(this, [this](GstState state) {
-        if (pipeline()) {
-            if (state == STATE_EOS) {
-                gst_element_seek_simple(pipeline(),
-                                        GST_FORMAT_TIME,
-                                        GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
-                                        0);
+    m_unsubscribe += sTogglePlayVideo.snapshot(state).listen(
+        post<GstState>(this, [this](GstState state) {
+            if (pipeline()) {
+                if (state == STATE_EOS) {
+                    gst_element_seek_simple(pipeline(),
+                                            GST_FORMAT_TIME,
+                                            GstSeekFlags(GST_SEEK_FLAG_FLUSH
+                                                         | GST_SEEK_FLAG_ACCURATE),
+                                            0);
+                }
+                gst_element_set_state(pipeline(),
+                                      state == GST_STATE_PAUSED || state == STATE_EOS
+                                          ? GST_STATE_PLAYING
+                                          : GST_STATE_PAUSED);
             }
-            gst_element_set_state(pipeline(),
-                                  state == GST_STATE_PAUSED || state == STATE_EOS
-                                      ? GST_STATE_PLAYING
-                                      : GST_STATE_PAUSED);
-        }
-    }));
+        }));
 }
 
 const cell<std::optional<QImage>> VideoPlayer::frame() const
 {
     return frame_sink;
+}
+
+const cell<bool> &VideoPlayer::isPlaying() const
+{
+    return m_isPlaying;
 }
 
 GstBusSyncReply VideoPlayer::message_cb(GstMessage *message)
@@ -242,6 +253,30 @@ void VideoGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem 
         painter->drawImage(boundingRect(), *i);
 }
 
+class PlayIcon : public SQWidgetWrapper<QWidget>
+{
+public:
+    PlayIcon(const cell<bool> &visible);
+
+protected:
+    void paintEvent(QPaintEvent *pe) override;
+};
+
+PlayIcon::PlayIcon(const cell<bool> &visible)
+    : SQWidgetWrapper<QWidget>(visible)
+{}
+
+void PlayIcon::paintEvent(QPaintEvent *)
+{
+    QPainter p(this);
+    static const int SIZE = 64;
+    const QPoint topLeft = rect().center() - QPoint(SIZE / 2, SIZE / 2);
+    p.setPen(QColor(255, 255, 255, 200));
+    p.setBrush(QColor(0, 0, 0, 100));
+    p.drawPolygon(QPolygon(
+        QVector<QPoint>({topLeft, topLeft + QPoint(SIZE, SIZE / 2), topLeft + QPoint(0, SIZE)})));
+}
+
 class VideoViewer : public QGraphicsView
 {
 public:
@@ -290,6 +325,10 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
         else
             fitInView(m_item, Qt::KeepAspectRatio);
     });
+
+    setLayout(new QVBoxLayout);
+    auto playIcon = new PlayIcon(m_player->isPlaying().map([](bool b) { return !b; }));
+    layout()->addWidget(playIcon);
 }
 
 class PictureViewer : public QGraphicsView
