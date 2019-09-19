@@ -3,11 +3,13 @@
 #include "mediadirectorymodel.h"
 
 #include <sqaction.h>
+#include <sqtimer.h>
 #include <sqtools.h>
+
+#include <qtc/progressindicator.h>
 
 #include <QMainWindow>
 #include <QSettings>
-#include <QTimer>
 
 #include <sodium/sodium.h>
 
@@ -17,8 +19,6 @@ QT_END_NAMESPACE
 
 class DirectoryTree;
 class FullscreenSplitter;
-
-namespace Utils { class ProgressIndicator; }
 
 class Settings
 {
@@ -43,6 +43,14 @@ private:
     std::vector<Setting> m_settings;
 };
 
+class SProgressIndicator : public Utils::ProgressIndicator
+{
+public:
+    SProgressIndicator(Utils::ProgressIndicatorSize size, const sodium::cell<bool> &visible);
+private:
+    Unsubscribe m_unsubscribe;
+};
+
 class BrowserWindow : public QMainWindow
 {
     Q_OBJECT
@@ -64,8 +72,8 @@ private:
     sodium::stream_sink<bool> m_sFullscreen;
     FullscreenSplitter *m_splitter = nullptr;
     DirectoryTree *m_fileTree = nullptr;
-    Utils::ProgressIndicator *m_progressIndicator = nullptr;
-    QTimer m_progressTimer;
+    SProgressIndicator *m_progressIndicator = nullptr;
+    std::unique_ptr<SQTimer> m_progressTimer;
     std::unique_ptr<MediaDirectoryModel> m_model;
     Unsubscribe m_unsubscribe;
 };

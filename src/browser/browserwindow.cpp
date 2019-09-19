@@ -8,8 +8,6 @@
 
 #include <util/fileutil.h>
 
-#include <qtc/progressindicator.h>
-
 #include <QAction>
 #include <QCheckBox>
 #include <QDesktopServices>
@@ -58,6 +56,13 @@ void Settings::save(QSettings *s)
         return;
     for (const auto &setting : m_settings)
         s->setValue(setting.key, setting.value.sample());
+}
+
+SProgressIndicator::SProgressIndicator(Utils::ProgressIndicatorSize size,
+                                       const sodium::cell<bool> &visible)
+    : ProgressIndicator(size)
+{
+    m_unsubscribe += visible.listen(ensureSameThread<bool>(this, [this](bool v) { setVisible(v); }));
 }
 
 QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
@@ -250,7 +255,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     const QString recursiveText = tr("Include Subfolders");
     const QString videosOnlyText = tr("Videos Only");
 
-    transaction t; // ensure single transaction
+    transaction t;                  // ensure single transaction
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
     auto recursiveCheckBox = new SQCheckBox(recursiveText, sIsRecursive, true);
     stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
@@ -296,21 +301,19 @@ BrowserWindow::BrowserWindow(QWidget *parent)
             m_model.get(),
             &MediaDirectoryModel::setPath);
 
-    m_progressIndicator = new Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Small,
-                                                       leftWidget);
     leftWidget->installEventFilter(this);
+    m_progressTimer = std::make_unique<SQTimer>(m_model->sLoadingStarted(),
+                                                m_model->sLoadingFinished());
+    m_progressTimer->setInterval(50);
+    m_progressTimer->setSingleShot(true);
+    m_progressIndicator = new SProgressIndicator(Utils::ProgressIndicatorSize::Small,
+                                                 m_progressTimer->sTimeout()
+                                                     .map_to(true)
+                                                     .or_else(
+                                                         m_model->sLoadingFinished().map_to(false))
+                                                     .hold(false));
+    m_progressIndicator->setParent(leftWidget);
     adaptProgressIndicator();
-    m_progressTimer.setInterval(50);
-    m_progressTimer.setSingleShot(true);
-    connect(&m_progressTimer, &QTimer::timeout, m_progressIndicator, &QWidget::show);
-    connect(m_model.get(),
-            &MediaDirectoryModel::loadingStarted,
-            &m_progressTimer,
-            qOverload<>(&QTimer::start));
-    connect(m_model.get(), &MediaDirectoryModel::loadingFinished, this, [this] {
-        m_progressTimer.stop();
-        m_progressIndicator->hide();
-    });
 
     auto menubar = new QMenuBar(this);
     setMenuBar(menubar);

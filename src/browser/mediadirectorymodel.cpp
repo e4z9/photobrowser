@@ -140,10 +140,6 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<IsRecursive> &isRecursive,
         for (const auto &value : m_futureWatcher.resultAt(index))
             insertItems(value.first, value.second);
     });
-    connect(&m_futureWatcher,
-            &QFutureWatcherBase::finished,
-            this,
-            &MediaDirectoryModel::loadingFinished);
 
     m_unsubscribe += m_isRecursive.listen(post<IsRecursive>(this, [this](IsRecursive) {
         setPath(m_path); /*trigger reload*/
@@ -250,9 +246,9 @@ void MediaDirectoryModel::setPath(const QString &path)
     beginResetModel();
     m_items.clear();
     endResetModel();
-    emit loadingStarted();
-    m_futureWatcher.setFuture(
-        Utils::runAsync([sortKey, path, showOption, recursive](QFutureInterface<ResultList> &fi) {
+    m_futureWatcher.setFuture(Utils::runAsync(
+        [this, sortKey, path, showOption, recursive](QFutureInterface<ResultList> &fi) {
+            m_sLoadingStarted.send({});
             MediaItems results = collectItems(fi, path, showOption);
             if (fi.isCanceled())
                 return;
@@ -274,6 +270,7 @@ void MediaDirectoryModel::setPath(const QString &path)
                         fi.reportResult(resultList);
                 }
             }
+            m_sLoadingFinished.send({});
         }));
 }
 
@@ -288,6 +285,16 @@ void MediaDirectoryModel::moveItemAtIndexToTrash(int i)
     Util::moveToTrash({item.filePath});
     m_items.erase(std::begin(m_items) + mIndex.row());
     endRemoveRows();
+}
+
+const sodium::stream<unit> &MediaDirectoryModel::sLoadingStarted() const
+{
+    return m_sLoadingStarted;
+}
+
+const sodium::stream<unit> &MediaDirectoryModel::sLoadingFinished() const
+{
+    return m_sLoadingFinished;
 }
 
 void MediaDirectoryModel::setSortKey(SortKey key)

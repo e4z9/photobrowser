@@ -55,12 +55,11 @@ public:
                         const sodium::cell<SortKey> &sortKey);
     ~MediaDirectoryModel() override;
 
+    const sodium::stream<sodium::unit> &sLoadingStarted() const;
+    const sodium::stream<sodium::unit> &sLoadingFinished() const;
+
     void setPath(const QString &path);
     void moveItemAtIndexToTrash(int index);
-
-signals:
-    void loadingStarted();
-    void loadingFinished();
 
 public:
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
@@ -83,5 +82,7 @@ private:
     sodium::cell<IsRecursive> m_isRecursive;
     sodium::cell<VideosOnly> m_videosOnly;
     sodium::cell<SortKey> m_sortKey;
+    sodium::stream_sink<sodium::unit> m_sLoadingStarted;
+    sodium::stream_sink<sodium::unit> m_sLoadingFinished;
     Unsubscribe m_unsubscribe;
 };
