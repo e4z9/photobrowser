@@ -100,7 +100,7 @@ static std::optional<QDateTime> extractXmpDateTime(const Exiv2::XmpData &data)
     if (md != data.end() && md->typeId() == Exiv2::xmpText) {
         bool ok;
         const qint64 secs = QString::fromStdString(md->toString()).toLongLong(&ok);
-        if (ok) {
+        if (ok && secs > 0) {
             const QDateTime baseDt({1904, 1, 1}, QTime(), Qt::UTC);
             return baseDt.addSecs(secs).toLocalTime();
         }
@@ -126,7 +126,6 @@ static std::optional<QSize> extractXmpDimensions(const Exiv2::XmpData &data)
             return QSize(width, height);
     }
     return {};
-
 }
 
 static std::optional<qint64> extractXmpDuration(const Exiv2::XmpData &data)
