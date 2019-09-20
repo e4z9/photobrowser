@@ -24,6 +24,31 @@ Q_LOGGING_CATEGORY(logView, "browser.viewer", QtWarningMsg)
 
 using namespace sodium;
 
+static QSize sizeForString(const QString &s, const QFont &f)
+{
+    QFontMetrics fm(f);
+    return fm.size(Qt::TextSingleLine, s) + QSize(1, 1);
+}
+
+void paintDuration(QPainter *painter,
+                   const QRect &rect,
+                   const QFont &font,
+                   const QPalette &palette,
+                   const QString &str)
+{
+    const QSize durationSize = sizeForString(str, font);
+    const QPoint bottomRight = rect.bottomRight();
+    const QRect durationRect(QPoint(bottomRight.x() - durationSize.width(),
+                                    bottomRight.y() - durationSize.height()),
+                             bottomRight);
+    painter->fillRect(durationRect, palette.brush(QPalette::Base));
+    painter->save();
+    painter->setPen(palette.color(QPalette::Text));
+    painter->setFont(font);
+    painter->drawText(durationRect, Qt::AlignCenter, str);
+    painter->restore();
+}
+
 static QImage imageForFilePath(const QString &filePath, Util::Orientation orientation)
 {
     QImage image(filePath);
@@ -40,17 +65,21 @@ public:
 
     const cell<std::optional<QImage>> frame() const;
     const cell<bool> &isPlaying() const;
+    // seconds of position, in milliseconds
+    const cell<std::optional<qint64>> &position() const;
 
     // internal
     GstBusSyncReply message_cb(GstMessage *message);
     void fetchPreroll();
     void fetchNewSample();
+    void updatePosition();
 
 private:
     void init();
     const int STATE_EOS = GST_STATE_PLAYING + 1;
     cell_sink<GstState> state;
     cell_sink<std::optional<QImage>> frame_sink;
+    cell_sink<std::optional<qint64>> position_sink;
     const cell<bool> m_isPlaying;
     GstElementRef pipeline;
     GstElementRef source;
@@ -80,6 +109,7 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                          const stream<qint64> &sStepVideo)
     : state(GST_STATE_NULL)
     , frame_sink(std::nullopt)
+    , position_sink(std::nullopt)
     , m_isPlaying(state.map([](GstState s) { return s == GST_STATE_PLAYING; }))
 {
     pipeline.setCleanUp([](GstElement *e) {
@@ -93,6 +123,7 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
             init();
             state.send(GST_STATE_NULL);
             frame_sink.send(std::nullopt);
+            position_sink.send(std::nullopt);
             if (source())
                 g_object_set(source(),
                              "uri",
@@ -143,6 +174,11 @@ const cell<bool> &VideoPlayer::isPlaying() const
     return m_isPlaying;
 }
 
+const cell<std::optional<qint64>> &VideoPlayer::position() const
+{
+    return position_sink;
+}
+
 GstBusSyncReply VideoPlayer::message_cb(GstMessage *message)
 {
     if (GST_MESSAGE_SRC(message) == GST_OBJECT(pipeline())) {
@@ -162,6 +198,8 @@ void VideoPlayer::fetchPreroll()
 {
     if (!sink())
         return;
+    transaction t;
+    updatePosition();
     GstSample *sample;
     g_signal_emit_by_name(sink(), "pull-preroll", &sample, nullptr);
     const std::optional<QImage> image = imageFromGstSample(sample);
@@ -174,12 +212,27 @@ void VideoPlayer::fetchNewSample()
 {
     if (!sink())
         return;
+    transaction t;
+    updatePosition();
     GstSample *sample;
     g_signal_emit_by_name(sink(), "pull-sample", &sample, nullptr);
     const std::optional<QImage> image = imageFromGstSample(sample);
     gst_sample_unref(sample);
     if (image) // locking of send can interfere with locking of setting GST_STATE_NULL
         post(this, [this, image] { frame_sink.send(image); });
+}
+
+void VideoPlayer::updatePosition()
+{
+    gint64 position;
+    if (pipeline() && gst_element_query_position(pipeline(), GST_FORMAT_TIME, &position)) {
+        qint64 secsAsMSecs = position / GST_SECOND * 1000;
+        if (secsAsMSecs != position_sink.sample())
+            position_sink.send({secsAsMSecs});
+        return;
+    }
+    if (position_sink.sample())
+        position_sink.send({});
 }
 
 void VideoPlayer::init()
@@ -277,6 +330,56 @@ void PlayIcon::paintEvent(QPaintEvent *)
         QVector<QPoint>({topLeft, topLeft + QPoint(SIZE, SIZE / 2), topLeft + QPoint(0, SIZE)})));
 }
 
+static const char kNoTimeString[] = "--:--";
+
+class TimeDisplay : public QWidget
+{
+public:
+    TimeDisplay(const cell<std::optional<qint64>> &position,
+                const cell<std::optional<qint64>> &duration);
+    QSize sizeHint() const override;
+
+protected:
+    void paintEvent(QPaintEvent *) override;
+
+private:
+    QString m_timeString = kNoTimeString;
+    Unsubscribe m_unsubscribe;
+};
+
+TimeDisplay::TimeDisplay(const cell<std::optional<qint64>> &position,
+                         const cell<std::optional<qint64>> &duration)
+{
+    using time_type = const std::optional<qint64>;
+    using time_pair_type = std::pair<time_type, time_type>;
+    setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+    const auto updateDisplay
+        = ensureSameThread<time_pair_type>(this, [this](const time_pair_type &t) {
+              const QString posStr = t.first ? durationToString(*t.first) : kNoTimeString;
+              const QString durStr = t.second ? durationToString(*t.second) : kNoTimeString;
+              m_timeString = posStr + " | " + durStr;
+              updateGeometry();
+              update();
+          });
+    m_unsubscribe += position
+                         .lift(duration,
+                               [](const time_type &p, const time_type &d) {
+                                   return time_pair_type(p, d);
+                               })
+                         .listen(updateDisplay);
+}
+
+QSize TimeDisplay::sizeHint() const
+{
+    return sizeForString(m_timeString, font());
+}
+
+void TimeDisplay::paintEvent(QPaintEvent *)
+{
+    QPainter p(this);
+    paintDuration(&p, rect(), font(), palette(), m_timeString);
+}
+
 class VideoViewer : public QGraphicsView
 {
 public:
@@ -309,6 +412,8 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
         return i ? std::make_optional<QUrl>(QUrl::fromLocalFile(i->resolvedFilePath))
                  : std::nullopt;
     });
+    const cell<std::optional<qint64>> duration = video.map(
+        [](const OptionalMediaItem &i) { return i ? i->metaData.duration : std::nullopt; });
     m_player = std::make_unique<VideoPlayer>(uri, sTogglePlayVideo, sStepVideo);
     m_item = new VideoGraphicsItem(m_player->frame());
     m_item->rectCallback = [this](const QRectF &r) {
@@ -326,9 +431,13 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
             fitInView(m_item, Qt::KeepAspectRatio);
     });
 
-    setLayout(new QVBoxLayout);
-    auto playIcon = new PlayIcon(m_player->isPlaying().map([](bool b) { return !b; }));
-    layout()->addWidget(playIcon);
+    auto layout = new QVBoxLayout;
+    setLayout(layout);
+    const int margin = style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+    layout->setContentsMargins(margin, margin, margin, margin);
+    layout->addWidget(new PlayIcon(m_player->isPlaying().map([](bool b) { return !b; })), 10);
+    layout->addStretch();
+    layout->addWidget(new TimeDisplay(m_player->position(), duration));
 }
 
 class PictureViewer : public QGraphicsView
@@ -457,6 +566,7 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
     m_unsubscribe += sFullscreen.listen(ensureSameThread<bool>(this, [this](bool b) {
         auto p = palette();
         p.setColor(QPalette::Base, b ? Qt::black : QGuiApplication::palette().color(QPalette::Base));
+        p.setColor(QPalette::Text, b ? Qt::white : QGuiApplication::palette().color(QPalette::Text));
         setPalette(p);
     }));
 

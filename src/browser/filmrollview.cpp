@@ -168,18 +168,7 @@ static void paintDuration(QPainter *painter,
     const QString durationStr = durationToString(durationMs);
     QFont durationFont = option.font;
     durationFont.setPixelSize(std::min(option.rect.height() / 8, 12));
-    QFontMetrics fm(durationFont);
-    const QSize durationSize = fm.size(Qt::TextSingleLine, durationStr) + QSize(1, 1);
-    const QPoint bottomRight = option.rect.bottomRight();
-    const QRect durationRect(QPoint(bottomRight.x() - durationSize.width(),
-                                    bottomRight.y() - durationSize.height()),
-                             bottomRight);
-    painter->fillRect(durationRect, option.palette.brush(QPalette::Base));
-    painter->save();
-    painter->setPen(Qt::black);
-    painter->setFont(durationFont);
-    painter->drawText(durationRect, Qt::AlignCenter, durationStr);
-    painter->restore();
+    paintDuration(painter, option.rect, durationFont, option.palette, durationStr);
 }
 
 static void paintLink(QPainter *painter, const QStyleOptionViewItem &option)

@@ -19,6 +19,12 @@ QT_END_NAMESPACE
 
 class Viewer;
 
+void paintDuration(QPainter *painter,
+                   const QRect &rect,
+                   const QFont &font,
+                   const QPalette &palette,
+                   const QString &str);
+
 class ImageView : public QWidget
 {
 public:
