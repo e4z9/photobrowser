@@ -15,6 +15,7 @@
 #include <QMenuBar>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWindowStateChangeEvent>
 
 #include <sodium/sodium.h>
 
@@ -362,10 +363,11 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     toggleFullscreen->setShortcut({"Meta+Ctrl+F"});
     // event filter will send new value to m_sFullscreen, so do post
     m_unsubscribe += toggleFullscreen->sTriggered().listen(post<unit>(this, [this](unit) {
-        if (window()->isFullScreen())
-            window()->setWindowState(window()->windowState() & ~Qt::WindowFullScreen);
-        else
+        if (window()->isFullScreen()) {
+            window()->setWindowState(m_previousWindowState & ~Qt::WindowFullScreen);
+        } else {
             window()->setWindowState(window()->windowState() | Qt::WindowFullScreen);
+        }
     }));
 
     viewMenu->addAction(toggleFullscreen);
@@ -414,7 +416,12 @@ bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_progressIndicator->parentWidget() && event->type() == QEvent::Resize) {
         adaptProgressIndicator();
     } else if (watched == window() && event->type() == QEvent::WindowStateChange) {
-        post(this, [this] { m_sFullscreen.send(isFullScreen()); });
+        QWindowStateChangeEvent *e = static_cast<QWindowStateChangeEvent *>(event);
+        m_previousWindowState = e->oldState();
+        if ((m_previousWindowState & Qt::WindowFullScreen)
+            != (window()->windowState() & Qt::WindowFullScreen)) {
+            post(this, [this] { m_sFullscreen.send(isFullScreen()); });
+        }
     }
     return QWidget::eventFilter(watched, event);
 }
