@@ -16,19 +16,10 @@ using namespace sodium;
 
 namespace {
 
-const QDateTime &createdDateTime(const MediaItem &item)
-{
-    if (item.metaData.created)
-        return *item.metaData.created;
-    if (item.created.isValid())
-        return item.created;
-    return item.lastModified;
-}
-
 bool itemLessThanExifCreation(const MediaItem &a, const MediaItem &b)
 {
-    const QDateTime &da = createdDateTime(a);
-    const QDateTime &db = createdDateTime(b);
+    const QDateTime &da = a.createdDateTime();
+    const QDateTime &db = b.createdDateTime();
     if (da == db)
         return a.resolvedFilePath < b.resolvedFilePath;
     return da < db;
@@ -432,9 +423,26 @@ QString sizeToString(const qint64 size)
     return MediaDirectoryModel::tr("%1 B").arg(QString::number(size));
 }
 
+const QDateTime &MediaItem::createdDateTime() const
+{
+    if (metaData.created) {
+        if (created.isValid()) {
+            // hack for devices that write local datetimes into UTC datetime metadata...
+            const QDateTime createdUTC = metaData.created->toUTC();
+            const QDateTime createdUTCInLocal(createdUTC.date(), createdUTC.time(), Qt::LocalTime);
+            if (std::abs(createdUTCInLocal.secsTo(created)) < 5)
+                return created;
+        }
+        return *metaData.created;
+    }
+    if (created.isValid())
+        return created;
+    return lastModified;
+}
+
 QString MediaItem::windowTitle() const
 {
-    const QDateTime dt = metaData.created ? *(metaData.created) : created;
+    const QDateTime &dt = createdDateTime();
     return QCoreApplication::translate("MediaItem", "%1%2 - %3, %4")
         .arg(fileName,
              metaData.duration ? (" - " + durationToString(*metaData.duration)) : QString(),
