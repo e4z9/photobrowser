@@ -103,10 +103,12 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 
 } // namespace
 
-MediaDirectoryModel::MediaDirectoryModel(const cell<IsRecursive> &isRecursive,
+MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
+                                         const cell<IsRecursive> &isRecursive,
                                          const cell<VideosOnly> &videosOnly,
                                          const cell<SortKey> &sortKey)
-    : m_isRecursive(isRecursive)
+    : m_path(path)
+    , m_isRecursive(isRecursive)
     , m_videosOnly(videosOnly)
     , m_sortKey(sortKey)
 {
@@ -132,11 +134,14 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<IsRecursive> &isRecursive,
             insertItems(value.first, value.second);
     });
 
+    m_unsubscribe += m_path.listen(post<QString>(this, [this](QString) {
+        load(); /*trigger reload*/
+    }));
     m_unsubscribe += m_isRecursive.listen(post<IsRecursive>(this, [this](IsRecursive) {
-        setPath(m_path); /*trigger reload*/
+        load(); /*trigger reload*/
     }));
     m_unsubscribe += m_videosOnly.listen(post<VideosOnly>(this, [this](VideosOnly) {
-        setPath(m_path); /*trigger reload*/
+        load(); /*trigger reload*/
     }));
     m_unsubscribe += m_sortKey.listen(post<SortKey>(this, [this](SortKey key) { setSortKey(key); }));
 }
@@ -227,10 +232,10 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
     return std::move(items);
 }
 
-void MediaDirectoryModel::setPath(const QString &path)
+void MediaDirectoryModel::load()
 {
     cancelAndWait();
-    m_path = path;
+    const QString path = m_path.sample();
     const IsRecursive recursive = m_isRecursive.sample();
     const VideosOnly showOption = m_videosOnly.sample();
     const SortKey sortKey = m_sortKey.sample();
@@ -293,7 +298,7 @@ void MediaDirectoryModel::setSortKey(SortKey key)
     if (m_futureWatcher.isRunning()) {
         // we need to restart the scanning
         cancelAndWait();
-        setPath(m_path);
+        load();
         return;
     }
     beginResetModel();

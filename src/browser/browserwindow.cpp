@@ -242,14 +242,22 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
 BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_splitter(new FullscreenSplitter(m_sFullscreen))
-    , m_fileTree(new DirectoryTree)
 {
     setCentralWidget(m_splitter);
     m_splitter->setOrientation(Qt::Horizontal);
     const QString recursiveText = tr("Include Subfolders");
     const QString videosOnlyText = tr("Videos Only");
 
-    transaction t;                  // ensure single transaction
+    transaction t; // ensure single transaction
+
+    stream_loop<QString> sRootPath;
+    stream_loop<QString> sPath;
+    m_fileTree = new DirectoryTree(sRootPath, sPath);
+    const auto sRootPathSettings = m_settings.add(kRootPath, m_fileTree->rootPath());
+    const auto sPathSettings = m_settings.add(kCurrentPath, m_fileTree->path());
+    sRootPath.loop(sRootPathSettings);
+    sPath.loop(sPathSettings);
+
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
     auto recursiveCheckBox = new SQCheckBox(recursiveText, sIsRecursive, true);
     stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
@@ -258,7 +266,10 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     const auto cIsRecursive = recursiveCheckBox->cChecked().map(&IsRecursive::fromBool);
     const auto cVideosOnly = videosOnlyCheckbox->cChecked().map(&VideosOnly::fromBool);
     cell_loop<MediaDirectoryModel::SortKey> cSortKey;
-    m_model = std::make_unique<MediaDirectoryModel>(cIsRecursive, cVideosOnly, cSortKey);
+    m_model = std::make_unique<MediaDirectoryModel>(m_fileTree->path(),
+                                                    cIsRecursive,
+                                                    cVideosOnly,
+                                                    cSortKey);
 
     stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;
@@ -289,11 +300,6 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     m_splitter->setFullscreenIndex(FullscreenSplitter::Second);
 
     setFocusProxy(m_fileTree);
-
-    connect(m_fileTree,
-            &DirectoryTree::currentPathChanged,
-            m_model.get(),
-            &MediaDirectoryModel::setPath);
 
     leftWidget->installEventFilter(this);
     m_progressTimer = std::make_unique<SQTimer>(m_model->sLoadingStarted(),
@@ -388,12 +394,6 @@ void BrowserWindow::restore(QSettings *settings)
         return;
     restoreGeometry(settings->value(kGeometry).toByteArray());
     restoreState(settings->value(kWindowState).toByteArray());
-    const auto rootPathValue = settings->value(kRootPath);
-    if (rootPathValue.isValid())
-        m_fileTree->setRootPath(rootPathValue.toString());
-    const auto currentPathValue = settings->value(kCurrentPath);
-    if (currentPathValue.isValid())
-        m_fileTree->setCurrentPath(currentPathValue.toString());
     m_settings.restore(settings);
 }
 
@@ -406,8 +406,6 @@ void BrowserWindow::save(QSettings *settings)
         window()->setWindowState(windowState() & ~Qt::WindowFullScreen);
     settings->setValue(kGeometry, saveGeometry());
     settings->setValue(kWindowState, saveState());
-    settings->setValue(kRootPath, m_fileTree->rootPath());
-    settings->setValue(kCurrentPath, m_fileTree->currentPath());
     m_settings.save(settings);
 }
 

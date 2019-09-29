@@ -51,7 +51,8 @@ public:
     enum class Role { Item = Qt::UserRole, Thumbnail, ShowDateDisplay, DateDisplay };
     enum class SortKey { ExifCreation, FileName, Random };
 
-    MediaDirectoryModel(const sodium::cell<IsRecursive> &isRecursive,
+    MediaDirectoryModel(const sodium::cell<QString> &path,
+                        const sodium::cell<IsRecursive> &isRecursive,
                         const sodium::cell<VideosOnly> &videosOnly,
                         const sodium::cell<SortKey> &sortKey);
     ~MediaDirectoryModel() override;
@@ -61,7 +62,6 @@ public:
 
     bool isShowingDateDisplay() const;
 
-    void setPath(const QString &path);
     void moveItemAtIndexToTrash(int index);
 
 public:
@@ -74,6 +74,7 @@ public:
     using ResultList = std::vector<std::pair<int, MediaItems>>;
 
 private:
+    void load();
     void setSortKey(SortKey key);
     void insertItems(int index, const MediaItems &items);
     void cancelAndWait();
@@ -81,7 +82,7 @@ private:
     MediaItems m_items;
     QFutureWatcher<ResultList> m_futureWatcher;
     mutable ThumbnailCreator m_thumbnailCreator;
-    QString m_path;
+    sodium::cell<QString> m_path;
     sodium::cell<IsRecursive> m_isRecursive;
     sodium::cell<VideosOnly> m_videosOnly;
     sodium::cell<SortKey> m_sortKey;

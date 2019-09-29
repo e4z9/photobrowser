@@ -7,6 +7,10 @@
 #include <QTreeView>
 #include <QVBoxLayout>
 
+#include <QDebug>
+
+using namespace sodium;
+
 static QString defaultRootPath()
 {
     return QDir::homePath();
@@ -35,11 +39,12 @@ static void styleDirTree(QTreeView *tree)
     tree->setExpandsOnDoubleClick(false);
 }
 
-DirectoryTree::DirectoryTree(QWidget *parent)
-    : QWidget(parent)
-    , m_dirSelector(new QComboBox)
+DirectoryTree::DirectoryTree(const stream<QString> &sRootPath, sodium::stream<QString> &sPath)
+    : m_dirSelector(new QComboBox)
     , m_dirTree(new QTreeView)
     , m_dirModel(new QFileSystemModel(this))
+    , m_rootPath(defaultRootPath())
+    , m_path(QString())
 {
     auto vLayout = new QVBoxLayout;
     vLayout->setContentsMargins(0, 0, 0, 0);
@@ -53,22 +58,44 @@ DirectoryTree::DirectoryTree(QWidget *parent)
     layout()->addWidget(m_dirTree);
     setFocusProxy(m_dirTree);
 
-    connect(m_dirTree, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
-        setRootPath(m_dirModel->filePath(index));
-    });
+    stream_sink<QString> sRootPathFromUI;
+    connect(m_dirTree,
+            &QTreeView::doubleClicked,
+            this,
+            [this, sRootPathFromUI](const QModelIndex &index) {
+                sRootPathFromUI.send(m_dirModel->filePath(index));
+            });
+    connect(m_dirSelector,
+            qOverload<int>(&QComboBox::activated),
+            this,
+            [this, sRootPathFromUI](int index) {
+                sRootPathFromUI.send(m_dirSelector->itemData(index).toString());
+            });
+    m_rootPath = sRootPathFromUI.or_else(sRootPath).hold(defaultRootPath());
+    m_unsubscribe += m_rootPath.listen(
+        ensureSameThread<QString>(this, [this](const QString &p) { setRootPath(p); }));
 
-    connect(m_dirSelector, qOverload<int>(&QComboBox::activated), this, [this](int index) {
-        setRootPath(m_dirSelector->itemData(index).toString());
-    });
-
+    stream_sink<QString> sPathFromTree;
     connect(m_dirTree->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this,
-            [this](const QModelIndex &current) {
-                emit currentPathChanged(path(current));
-            });
+            post<QModelIndex>(this, [this, sPathFromTree](QModelIndex) {
+                sPathFromTree.send(path(m_dirTree->currentIndex()));
+            }));
+    m_path = sPathFromTree.or_else(sPath).hold(QString());
+    m_unsubscribe += m_path.listen(ensureSameThread<QString>(this, [this](const QString &p) {
+        m_dirTree->setCurrentIndex(m_dirModel->index(p));
+    }));
+}
 
-    setRootPath(defaultRootPath());
+const sodium::cell<QString> &DirectoryTree::rootPath() const
+{
+    return m_rootPath;
+}
+
+const sodium::cell<QString> &DirectoryTree::path() const
+{
+    return m_path;
 }
 
 void DirectoryTree::setRootPath(const QString &path)
@@ -90,24 +117,9 @@ void DirectoryTree::setRootPath(const QString &path)
         m_dirTree->setCurrentIndex(rootIndex);
 }
 
-QString DirectoryTree::rootPath() const
-{
-    return path(m_dirTree->rootIndex());
-}
-
-void DirectoryTree::setCurrentPath(const QString &path)
-{
-    m_dirTree->setCurrentIndex(m_dirModel->index(path));
-}
-
 QString DirectoryTree::path(const QModelIndex &index) const
 {
     if (!index.isValid())
         return {};
     return m_dirModel->filePath(index);
-}
-
-QString DirectoryTree::currentPath() const
-{
-    return path(m_dirTree->currentIndex());
 }
