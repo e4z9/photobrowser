@@ -48,7 +48,7 @@ class MediaDirectoryModel : public QAbstractItemModel
     Q_OBJECT
 
 public:
-    enum class Role { Item = Qt::UserRole, Thumbnail };
+    enum class Role { Item = Qt::UserRole, Thumbnail, ShowDateDisplay, DateDisplay };
     enum class SortKey { ExifCreation, FileName, Random };
 
     MediaDirectoryModel(const sodium::cell<IsRecursive> &isRecursive,
@@ -58,6 +58,8 @@ public:
 
     const sodium::stream<sodium::unit> &sLoadingStarted() const;
     const sodium::stream<sodium::unit> &sLoadingFinished() const;
+
+    bool isShowingDateDisplay() const;
 
     void setPath(const QString &path);
     void moveItemAtIndexToTrash(int index);

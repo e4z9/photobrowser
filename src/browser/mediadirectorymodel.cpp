@@ -304,6 +304,11 @@ void MediaDirectoryModel::setSortKey(SortKey key)
     endResetModel();
 }
 
+bool MediaDirectoryModel::isShowingDateDisplay() const
+{
+    return m_sortKey.sample() == SortKey::ExifCreation;
+}
+
 QModelIndex MediaDirectoryModel::index(int row, int column, const QModelIndex &parent) const
 {
     if (parent.isValid())
@@ -368,6 +373,9 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
         return {};
     }
     const MediaItem &item = m_items.at(index.row());
+    const OptionalMediaItem previousItem = index.row() > 0
+                                               ? std::make_optional(m_items.at(index.row() - 1))
+                                               : std::nullopt;
     if (role == Qt::DisplayRole)
         return item.fileName;
     if (role == int(Role::Item))
@@ -378,6 +386,16 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
         m_thumbnailCreator.requestThumbnail(item);
         if (item.metaData.thumbnail)
             return *item.metaData.thumbnail;
+        return {};
+    }
+    if (role == int(Role::ShowDateDisplay))
+        return isShowingDateDisplay();
+    if (role == int(Role::DateDisplay)) {
+        if (isShowingDateDisplay()
+            && (!previousItem
+                || previousItem->createdDateTime().date() != item.createdDateTime().date())) {
+            return item.createdDateTime().toString("d.M.");
+        }
         return {};
     }
     if (role == Qt::ToolTipRole)

@@ -16,39 +16,14 @@ using namespace sodium;
 class Fotoroll : public SQListView
 {
 public:
-    Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
-        : SQListView(sCurrentIndex)
-        , m_currentItem(std::nullopt)
-    {
-        setFlow(QListView::LeftToRight);
-        setItemDelegate(&m_delegate);
+    Fotoroll(const stream<boost::optional<int>> &sCurrentIndex);
 
-        m_currentItem = cCurrentIndex().map([this](boost::optional<int> i) -> OptionalMediaItem {
-            if (i) {
-                const auto value = model()->data(model()->index(*i, 0),
-                                                 int(MediaDirectoryModel::Role::Item));
-                if (value.canConvert<MediaItem>())
-                    return value.value<MediaItem>();
-            }
-            return {};
-        });
-    }
+    bool event(QEvent *ev) override;
 
-    bool event(QEvent *ev) override
-    {
-        if (ev->type() == QEvent::Resize) {
-            transaction t; // avoid updating cells for deselecting and selecting
-            const auto selection = selectionModel()->selection();
-            const auto current = selectionModel()->currentIndex();
-            // force relayout since we want the thumbnails to resize
-            reset();
-            selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
-            selectionModel()->setCurrentIndex(current, QItemSelectionModel::Current);
-        }
-        return SQListView::event(ev);
-    }
+    const cell<OptionalMediaItem> &currentItem() const;
 
-    const cell<OptionalMediaItem> &currentItem() const { return m_currentItem; }
+protected:
+    void paintEvent(QPaintEvent *pe) override;
 
 private:
     cell<OptionalMediaItem> m_currentItem;
@@ -107,6 +82,12 @@ const sodium::cell<OptionalMediaItem> &FilmRollView::currentItem() const
     return m_fotoroll->currentItem();
 }
 
+static QFont scaledFont(QFont font, int height)
+{
+    font.setPixelSize(std::max(5, std::min(height / 8, 12)));
+    return font;
+}
+
 static QSize thumbnailSize(const int viewHeight, const QSize dimensions)
 {
     const int height = viewHeight - 2 * MARGIN;
@@ -117,12 +98,14 @@ static QSize thumbnailSize(const int viewHeight, const QSize dimensions)
     return {width, height};
 }
 
-static int availableHeight(const QStyleOptionViewItem &option)
+static int availableHeight(const QStyleOptionViewItem &option, bool showDateDisplay)
 {
     if (!option.widget)
         return option.rect.height();
+    const QFont dateFont = scaledFont(option.font, option.rect.height());
     return option.widget->height() - option.widget->style()->pixelMetric(QStyle::PM_ScrollBarExtent)
-           - option.widget->style()->pixelMetric(QStyle::PM_ScrollView_ScrollBarSpacing);
+           - option.widget->style()->pixelMetric(QStyle::PM_ScrollView_ScrollBarSpacing)
+           - (showDateDisplay ? QFontMetrics(dateFont).height() : 0);
 }
 
 static QSize defaultSize()
@@ -138,7 +121,9 @@ static QRect thumbRect(const QStyleOptionViewItem &option, const QSize &size)
     return {option.rect.x() + MARGIN - 1, option.rect.y() + MARGIN - 1, size.width(), size.height()};
 }
 
-QRect MediaItemDelegate::paintThumbnail(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+QRect MediaItemDelegate::paintThumbnail(QPainter *painter,
+                                        const QStyleOptionViewItem &option,
+                                        const QModelIndex &index) const
 {
     const auto thumbnail = index.data(int(MediaDirectoryModel::Role::Thumbnail)).value<QPixmap>();
     if (!thumbnail.isNull()) {
@@ -166,8 +151,7 @@ static void paintDuration(QPainter *painter,
                           const qint64 durationMs)
 {
     const QString durationStr = durationToString(durationMs);
-    QFont durationFont = option.font;
-    durationFont.setPixelSize(std::min(option.rect.height() / 8, 12));
+    const QFont durationFont = scaledFont(option.font, option.rect.height());
     paintDuration(painter, option.rect, durationFont, option.palette, durationStr);
 }
 
@@ -196,18 +180,19 @@ void MediaItemDelegate::paint(QPainter *painter,
                               const QStyleOptionViewItem &option,
                               const QModelIndex &index) const
 {
+    const auto showDateDisplay = index.data(int(MediaDirectoryModel::Role::ShowDateDisplay)).toBool();
+    const int height = availableHeight(option, showDateDisplay);
+    const QRect availableRect(option.rect.x(), option.rect.y(), option.rect.width(), height);
     if (option.state & QStyle::State_Selected) {
         const QPalette::ColorGroup group = (option.state & QStyle::State_HasFocus)
                                                ? QPalette::Active
                                                : QPalette::Inactive;
-        painter->fillRect(option.rect, option.palette.brush(group, QPalette::Highlight));
+        painter->fillRect(availableRect, option.palette.brush(group, QPalette::Highlight));
     }
     const auto value = index.data(int(MediaDirectoryModel::Role::Item));
     if (!value.canConvert<MediaItem>())
         return;
     const auto item = value.value<MediaItem>();
-    const int height = availableHeight(option);
-    const QRect availableRect(option.rect.x(), option.rect.y(), option.rect.width(), height);
     QStyleOptionViewItem fixedOpt = option;
     fixedOpt.rect = availableRect;
 
@@ -221,6 +206,17 @@ void MediaItemDelegate::paint(QPainter *painter,
 
     if (item.filePath != item.resolvedFilePath)
         paintLink(painter, option);
+
+    const QVariant dateDisplay = showDateDisplay
+                                     ? index.data(int(MediaDirectoryModel::Role::DateDisplay))
+                                     : QVariant();
+    if (dateDisplay.isValid()) {
+        const QFont dateFont = scaledFont(option.font, option.rect.height());
+        painter->setFont(dateFont);
+        painter->drawText(QPoint(option.rect.x() + MARGIN,
+                                 option.rect.bottom() - QFontMetrics(dateFont).descent()),
+                          dateDisplay.toString());
+    }
 }
 
 static QSize itemSize(const MediaItem &item)
@@ -240,6 +236,72 @@ QSize MediaItemDelegate::sizeHint(const QStyleOptionViewItem &option, const QMod
     if (!value.canConvert<MediaItem>())
         return {};
     const auto item = value.value<MediaItem>();
+    const auto showDateDisplay = index.data(int(MediaDirectoryModel::Role::ShowDateDisplay)).toBool();
     // TODO exiv2 might not be able to handle it, but Qt probably can (e.g. videos)
-    return thumbnailSize(availableHeight(option), itemSize(item)) + QSize(2 * MARGIN, 2 * MARGIN);
+    return thumbnailSize(availableHeight(option, showDateDisplay), itemSize(item))
+           + QSize(2 * MARGIN, 2 * MARGIN);
+}
+
+Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
+    : SQListView(sCurrentIndex)
+    , m_currentItem(std::nullopt)
+{
+    setFlow(QListView::LeftToRight);
+    setItemDelegate(&m_delegate);
+
+    m_currentItem = cCurrentIndex().map([this](boost::optional<int> i) -> OptionalMediaItem {
+        if (i) {
+            const auto value = model()->data(model()->index(*i, 0),
+                                             int(MediaDirectoryModel::Role::Item));
+            if (value.canConvert<MediaItem>())
+                return value.value<MediaItem>();
+        }
+        return {};
+    });
+}
+
+bool Fotoroll::event(QEvent *ev)
+{
+    if (ev->type() == QEvent::Resize) {
+        transaction t; // avoid updating cells for deselecting and selecting
+        const auto selection = selectionModel()->selection();
+        const auto current = selectionModel()->currentIndex();
+        // force relayout since we want the thumbnails to resize
+        reset();
+        selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
+        selectionModel()->setCurrentIndex(current, QItemSelectionModel::Current);
+    }
+    return SQListView::event(ev);
+}
+
+const cell<OptionalMediaItem> &Fotoroll::currentItem() const
+{
+    return m_currentItem;
+}
+
+void Fotoroll::paintEvent(QPaintEvent *pe)
+{
+    SQListView::paintEvent(pe);
+    if (!static_cast<MediaDirectoryModel *>(model())->isShowingDateDisplay())
+        return;
+    // paint date of first visible item
+    const auto index = indexAt({0, 0});
+    const auto value = index.data(int(MediaDirectoryModel::Role::Item));
+    if (!value.canConvert<MediaItem>())
+        return;
+    const auto item = value.value<MediaItem>();
+    const auto date = item.createdDateTime();
+    const auto dateString = date.toString("d. MMMM yyyy");
+    QPainter p(viewport());
+    const QFont dateFont = scaledFont(font(), rect().height());
+    p.setFont(dateFont);
+    const QFontMetrics fm(dateFont);
+    p.fillRect(QRect(viewport()->rect().x(),
+                     viewport()->rect().bottom() - fm.height(),
+                     MARGIN + fm.width(dateString),
+                     fm.height()),
+               palette().brush(QPalette::Base));
+    p.drawText(QPoint(viewport()->rect().x() + MARGIN,
+                      viewport()->rect().bottom() - QFontMetrics(dateFont).descent()),
+               dateString);
 }
