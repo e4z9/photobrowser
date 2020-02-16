@@ -30,3 +30,8 @@ set_target_properties(photobrowser PROPERTIES
 )
 
 target_link_libraries(photobrowser sodium-qt thirdparty_qtc util gstreamer)
+
+install(TARGETS photobrowser
+    BUNDLE
+        DESTINATION .
+)
