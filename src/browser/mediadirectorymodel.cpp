@@ -384,7 +384,7 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
     if (role == Qt::DisplayRole)
         return item.fileName;
     if (role == int(Role::Item))
-        return qVariantFromValue(item);
+        return QVariant::fromValue(item);
     if (role == int(Role::Thumbnail)) {
         if (item.thumbnail)
             return *item.thumbnail;

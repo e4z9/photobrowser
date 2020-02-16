@@ -298,7 +298,7 @@ void Fotoroll::paintEvent(QPaintEvent *pe)
     const QFontMetrics fm(dateFont);
     p.fillRect(QRect(viewport()->rect().x(),
                      viewport()->rect().bottom() - fm.height(),
-                     MARGIN + fm.width(dateString),
+                     MARGIN + fm.horizontalAdvance(dateString),
                      fm.height()),
                palette().brush(QPalette::Base));
     p.drawText(QPoint(viewport()->rect().x() + MARGIN,

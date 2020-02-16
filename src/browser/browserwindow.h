@@ -83,7 +83,7 @@ private:
 template<typename T>
 const sodium::stream<T> Settings::add(const QByteArray &key, const sodium::cell<T> &value)
 {
-    return add(key, value.map([](const T &t) -> QVariant { return qVariantFromValue(t); }))
+    return add(key, value.map([](const T &t) -> QVariant { return QVariant::fromValue(t); }))
         .map([](const QVariant &v) { return v.value<T>(); });
 }
 
