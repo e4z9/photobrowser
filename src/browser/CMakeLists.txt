@@ -27,6 +27,8 @@ set_target_properties(photobrowser PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER "de.zillerey.photobrowser"
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+
+    INSTALL_RPATH "@executable_path/../Frameworks"
 )
 
 target_link_libraries(photobrowser sodium-qt thirdparty_qtc util gstreamer)
