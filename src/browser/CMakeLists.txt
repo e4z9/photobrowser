@@ -36,4 +36,15 @@ target_link_libraries(photobrowser sodium-qt thirdparty_qtc util gstreamer)
 install(TARGETS photobrowser
     BUNDLE
         DESTINATION .
+    COMPONENT deploy
+)
+
+get_target_property(_moc_binary Qt5::moc IMPORTED_LOCATION)
+get_filename_component(_qt_bin_path "${_moc_binary}" DIRECTORY)
+get_filename_component(_qt_path "${_qt_bin_path}/../" ABSOLUTE)
+
+install(
+    CODE "execute_process(COMMAND stack \"${PROJECT_SOURCE_DIR}/scripts/deploy.hs\" -t \"\${CMAKE_INSTALL_PREFIX}/photobrowser.app\" -q \"${_qt_path}\")"
+    COMPONENT deploy
+    EXCLUDE_FROM_ALL
 )
