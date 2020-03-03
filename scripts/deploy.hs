@@ -293,12 +293,11 @@ deployLibs filter bundle infos = do
     addrpath frameworksPath `traverse_` deployedFiles
 
 -- |Searches for "gst-plugin-scanner".
--- TOOD can this be made to bail out of the fold early?
 findGstPluginScanner :: Sh (Maybe FilePath)
-findGstPluginScanner = findFold (\fpy fp -> if "/gst-plugin-scanner" `L.isSuffixOf` fp
-                                                then pure (Just fp)
-                                                else pure fpy)
-                                Nothing "/usr/local/Cellar/gstreamer"
+findGstPluginScanner = findFold checkForScanner Nothing "/usr/local/Cellar/gstreamer"
+    where checkForScanner (Just fp) _ = pure (Just fp)
+          checkForScanner _ fp = if "/gst-plugin-scanner" `L.isSuffixOf` fp then pure (Just fp)
+                                                                            else pure Nothing
 
 -- |Collects all Gstreamer files to be deployed.
 collectGstreamer :: FilePath -> Sh [DeploymentInfo]
