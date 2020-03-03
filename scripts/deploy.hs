@@ -22,6 +22,7 @@ import Shelly hiding ((<.>))
 import System.Directory (getPermissions, setPermissions, setOwnerWritable)
 import System.FilePath hiding ((</>))
 import Control.Monad (filterM)
+import Data.Foldable (traverse_)
 import qualified Data.Text as T
 import qualified Data.List as L
 import Data.Maybe (maybeToList)
@@ -77,7 +78,7 @@ executablePath f = f </> "Contents" </> "MacOS" </> (takeBaseName . dropTrailing
 qtPluginFiles :: FilePath -> Sh [FilePath]
 qtPluginFiles qt = do
     let dirs = (qt </> "plugins" </>) <$> qtPluginPathNames
-    concat <$> findWhen isLibrary `mapM` dirs
+    concat <$> findWhen isLibrary `traverse` dirs
     where isLibrary fp = return $ ".dylib" `L.isSuffixOf` fp
 
 -- |Returns a list of framework directories to deploy from a Qt installation path.
@@ -94,7 +95,7 @@ frameworkFiles = findDirFilterWhen notHeaderPath (\fp -> (&&) <$> notDir fp <*> 
 
 -- |Collects the files to copy from all frameworks from a Qt installation path.
 allFrameworkFiles :: FilePath -> Sh [FilePath]
-allFrameworkFiles qt = concat <$> frameworkFiles `mapM` qtFrameworks qt
+allFrameworkFiles qt = concat <$> frameworkFiles `traverse` qtFrameworks qt
 
 -- |Copies a file from a source directory to a destination directory.
 -- The first argument is the copy action to perform, for example 'cp' or 'cp_r'.
@@ -120,7 +121,7 @@ cpWithBase :: (FilePath -> FilePath -> Sh ()) -- ^ Copy operation to perform
             -> FilePath                       -- ^ Destination base path
             -> [FilePath]                     -- ^ Files in the source path to copy to destination
             -> Sh ()
-cpWithBase f srcBase destBase files = cpWithBase1 f srcBase destBase `mapM_` files
+cpWithBase f srcBase destBase files = cpWithBase1 f srcBase destBase `traverse_` files
 
 -- |Prints source and target FilePath before the specified action.
 logged :: MonadIO io
@@ -209,7 +210,7 @@ collectDependencies predicate binaries = S.toList <$> _run S.empty (S.fromList b
 chpaths :: [FilePath] -- ^ List of references to change (as required)
         -> BinInfo    -- ^ 'BinInfo' for the binary to change
         -> Sh ()
-chpaths pathsToChange lib = chpath lib `mapM_` pathsToChange
+chpaths pathsToChange lib = chpath lib `traverse_` pathsToChange
     where chpath lib path = maybe (pure ()) (chpath' lib) (findPath path lib)
           chpath' lib path = silently $ run_ "install_name_tool"
                                              (T.pack <$> ["-change", path,
@@ -280,21 +281,21 @@ deployLibs filter bundle infos = do
     echoHr
     echo "Copying libraries"
     echoHr
-    let copyInfo i = flip (logged cpWritable) (getTargetPath i) `mapM` getFiles i
-    deployedFiles <- concat <$> copyInfo `mapM` infos
+    let copyInfo i = flip (logged cpWritable) (getTargetPath i) `traverse` getFiles i
+    deployedFiles <- concat <$> copyInfo `traverse` infos
     echoHr
     echo "Deploying dependencies"
     echoHr
     allBinInfos <- collectDependencies filter deployedFiles
     let (origInfos, depInfos) = L.partition (flip L.elem deployedFiles . getBinPath) allBinInfos
         addCanonic p = canonic p >>= (return . (:[p]))
-    allBinaries <- concat <$> mapM (addCanonic . getBinPath) allBinInfos
-    deployLib allBinaries frameworksPath `mapM_` depInfos
+    allBinaries <- concat <$> traverse (addCanonic . getBinPath) allBinInfos
+    deployLib allBinaries frameworksPath `traverse_` depInfos
     echoHr
     echo "Fixing references"
     echoHr
-    chpaths allBinaries `mapM_` origInfos
-    addrpath frameworksPath `mapM_` deployedFiles
+    chpaths allBinaries `traverse_` origInfos
+    addrpath frameworksPath `traverse_` deployedFiles
 
 -- |Searches for "gst-plugin-scanner".
 -- TOOD can this be made to bail out of the fold early?
@@ -310,7 +311,7 @@ collectGstreamer target = do
     echoHr
     echo "Scanning for Gstreamer tools"
     echoHr
-    pluginFiles <- ls "/usr/local/lib/gstreamer-1.0" >>= filterM test_f >>= mapM canonic
+    pluginFiles <- ls "/usr/local/lib/gstreamer-1.0" >>= filterM test_f >>= traverse canonic
     maybeScanner <- findGstPluginScanner
     let maybeScannerInfo = DeploymentInfo (target </> "Contents" </> "MacOS") . pure <$> maybeScanner
     return $ DeploymentInfo (pluginsTarget target </> "gstreamer-1.0") pluginFiles :
