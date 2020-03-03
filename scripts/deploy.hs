@@ -6,7 +6,6 @@
   --package filepath
   --package directory
   --package text
-  --package containers
 -}
 
 -- Run with "stack deploy_shelly.hs -q <qt_path> -t <target_app_bundle>"
@@ -17,7 +16,6 @@
 module Main where
 
 import Options.Applicative
-import Data.Semigroup ((<>))
 import Shelly hiding ((<.>))
 import System.Directory (getPermissions, setPermissions, setOwnerWritable)
 import System.FilePath hiding ((</>))
@@ -26,7 +24,6 @@ import Data.Foldable (traverse_)
 import qualified Data.Text as T
 import qualified Data.List as L
 import Data.Maybe (maybeToList)
-import qualified Data.Set as S
 import Control.Monad.IO.Class
 
 -- |Filter that specifies non-Qt libraries to deploy.
@@ -193,17 +190,15 @@ binInfo f = do
 collectDependencies :: (FilePath -> Bool) -- ^ Only recurses into dependencies that match this predicate
                     -> [FilePath]         -- ^ List of binaries to start from
                     -> Sh [BinInfo]
-collectDependencies predicate binaries = S.toList <$> _run S.empty (S.fromList binaries)
-    where _run :: S.Set BinInfo -> S.Set FilePath -> Sh (S.Set BinInfo)
-          _run acc fs
-              | null fs   = return acc
-              | otherwise = do
-                                let next = S.elemAt 0 fs
-                                info <- binInfo next
-                                let acc' = S.insert info acc
-                                let add = S.fromList $ filter predicate (getDependencies info)
-                                let fs' = S.deleteAt 0 fs `S.union` S.difference add (getBinPath `S.map` acc')
-                                _run acc' fs'
+collectDependencies predicate = go []
+    where go :: [BinInfo] -> [FilePath] -> Sh [BinInfo]
+          go acc []     = return acc
+          go acc (f:fs) = do
+                            info <- binInfo f
+                            let acc' = info:acc
+                            let add = filter predicate (getDependencies info)
+                            let fs' = fs `L.union` (add L.\\ (getBinPath <$> acc'))
+                            go acc' fs'
 
 -- |Changes the references to the specified libraries to just "@rpath/libfilename.ext".
 -- This ignores the actual paths to the binaries, just checks if the filename matches.
