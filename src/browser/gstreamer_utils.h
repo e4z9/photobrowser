@@ -8,23 +8,35 @@
 
 #include <functional>
 
-class GstElementRef
+template<typename T>
+class GstRef
 {
 public:
-    GstElementRef() = default;
-    GstElementRef(GstElement *element);
-    GstElementRef(const GstElementRef &other) = default;
-    GstElementRef &operator=(const GstElementRef &) = delete;
-    ~GstElementRef();
+    GstRef() = default;
+    GstRef(T *element)
+        : m_element(element)
+    {}
 
-    GstElement *operator()() const;
-    void reset(GstElement *element = nullptr);
+    GstRef(const GstRef<T> &other) = default;
+    GstRef &operator=(const GstRef<T> &) = delete;
+    ~GstRef() { reset(); }
 
-    using CleanUp = std::function<void(GstElement *)>;
-    void setCleanUp(const CleanUp &cleanup);
+    T *operator()() const { return m_element; }
+
+    void reset(T *element = nullptr)
+    {
+        if (m_cleanup)
+            m_cleanup(m_element);
+        if (m_element)
+            gst_object_unref(m_element);
+        m_element = element;
+    }
+
+    using CleanUp = std::function<void(T *)>;
+    void setCleanUp(const CleanUp &cleanup) { m_cleanup = cleanup; }
 
 private:
-    GstElement *m_element = nullptr;
+    T *m_element = nullptr;
     CleanUp m_cleanup;
 };
 

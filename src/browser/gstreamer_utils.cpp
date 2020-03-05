@@ -1,33 +1,5 @@
 #include "gstreamer_utils.h"
 
-GstElementRef::GstElementRef(GstElement *element)
-    : m_element(element)
-{}
-
-GstElementRef::~GstElementRef()
-{
-    reset();
-}
-
-GstElement *GstElementRef::operator()() const
-{
-    return m_element;
-}
-
-void GstElementRef::reset(GstElement *element)
-{
-    if (m_cleanup)
-        m_cleanup(m_element);
-    if (m_element)
-        gst_object_unref(m_element);
-    m_element = element;
-}
-
-void GstElementRef::setCleanUp(const GstElementRef::CleanUp &cleanup)
-{
-    m_cleanup = cleanup;
-}
-
 std::optional<QImage> imageFromGstSample(GstSample *sample)
 {
     if (sample) {

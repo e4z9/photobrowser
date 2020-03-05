@@ -81,9 +81,10 @@ private:
     cell_sink<std::optional<QImage>> frame_sink;
     cell_sink<std::optional<qint64>> position_sink;
     const cell<bool> m_isPlaying;
-    GstElementRef pipeline;
-    GstElementRef source;
-    GstElementRef sink;
+    GstRef<GstElement> pipeline;
+    GstRef<GstElement> source;
+    GstRef<GstElement> sink;
+    GstRef<GstBus> bus;
     Unsubscribe m_unsubscribe;
 };
 
@@ -237,6 +238,7 @@ void VideoPlayer::updatePosition()
 
 void VideoPlayer::init()
 {
+    bus.reset();
     sink.reset();
     source.reset();
     GError *error = nullptr;
@@ -253,8 +255,8 @@ void VideoPlayer::init()
     }
     sink.reset(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
     source.reset(gst_bin_get_by_name(GST_BIN(pipeline()), "source"));
-    GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline()));
-    gst_bus_set_sync_handler(bus, &vp_message_cb, this, nullptr);
+    bus.reset(gst_pipeline_get_bus(GST_PIPELINE(pipeline())));
+    gst_bus_set_sync_handler(bus(), &vp_message_cb, this, nullptr);
 
     g_object_set(sink(), "emit-signals", true, nullptr);
     g_signal_connect(sink(), "new-preroll", G_CALLBACK(&new_preroll_cb), this);

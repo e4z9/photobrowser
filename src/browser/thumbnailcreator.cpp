@@ -151,7 +151,7 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
 {
     const QByteArray uri = QUrl::fromLocalFile(resolvedFilePath).toEncoded();
     GError *error = nullptr;
-    GstElementRef pipeline(
+    GstRef<GstElement> pipeline(
         gst_parse_launch(QByteArray(
                              "uridecodebin uri=" + uri
                              + " ! videoconvert ! videoscale ! videoflip video-direction=auto !"
@@ -164,7 +164,7 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
         g_error_free(error);
         return;
     }
-    GstElementRef sink(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
+    GstRef<GstElement> sink(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
     if (fi.isCanceled())
         return;
     pipeline.setCleanUp([](GstElement *e) { gst_element_set_state(e, GST_STATE_NULL); });
