@@ -17,7 +17,7 @@ module Main where
 
 import Options.Applicative
 import Shelly hiding ((<.>))
-import System.Directory (getPermissions, setPermissions, setOwnerWritable)
+import System.Directory
 import System.FilePath hiding ((</>))
 import Control.Monad (filterM)
 import Data.Foldable (traverse_)
@@ -85,10 +85,11 @@ qtFrameworks qt = (\f -> qt </> "lib" </> f <.> "framework") <$> qtFrameworkName
 -- |Collects the files to copy from a single framework.
 -- Excludes headers and .prl files.
 frameworkFiles :: FilePath -> Sh [FilePath]
-frameworkFiles = findDirFilterWhen notHeaderPath (\fp -> (&&) <$> notDir fp <*> fileOk fp)
+frameworkFiles = findDirFilterWhen notHeaderPath (\fp -> notDir fp <&&> fileOk fp)
     where notHeaderPath fp = return $ not $ "/Headers" `L.isSuffixOf` fp
           notDir fp = not <$> test_d fp
           fileOk fp = return $ not $ ".prl" `L.isSuffixOf` fp
+          (<&&>) = liftA2 (&&)
 
 -- |Collects the files to copy from all frameworks from a Qt installation path.
 allFrameworkFiles :: FilePath -> Sh [FilePath]
@@ -100,11 +101,11 @@ allFrameworkFiles qt = concat <$> frameworkFiles `traverse` qtFrameworks qt
 -- full path to the file or directory to copy. The relative location of the file
 -- to the source directory is kept in the destination directory.
 -- Creates the destination directory if needed.
-cpWithBase1 :: (FilePath -> FilePath -> Sh ()) -- ^ Copy operation to perform
+cpWithBase1 :: (FilePath -> FilePath -> Sh a) -- ^ Copy operation to perform
             -> FilePath                        -- ^ Source base path
             -> FilePath                        -- ^ Destination base path
             -> FilePath                        -- ^ File in the source path to copy to destination
-            -> Sh ()
+            -> Sh a
 cpWithBase1 f srcBase destBase fp = do
     fpPart <- relativeTo srcBase fp
     let fp' = destBase </> fpPart
@@ -113,7 +114,7 @@ cpWithBase1 f srcBase destBase fp = do
 
 -- |Similar to 'cpWithBase1' but for multiple 'FilePath's with the same
 -- source and destination directories.
-cpWithBase :: (FilePath -> FilePath -> Sh ()) -- ^ Copy operation to perform
+cpWithBase :: (FilePath -> FilePath -> Sh a) -- ^ Copy operation to perform
             -> FilePath                       -- ^ Source base path
             -> FilePath                       -- ^ Destination base path
             -> [FilePath]                     -- ^ Files in the source path to copy to destination
@@ -151,7 +152,7 @@ deployQt qt target = do
     putHr
     putStrLn "Copying Qt frameworks"
     putHr
-    shelly $ allFrameworkFiles qt >>= cpWithBase (logged cp) frameworksSrc (frameworksTarget target)
+    shelly $ allFrameworkFiles qt >>= cpWithBase (logged cpPlusKeep) frameworksSrc (frameworksTarget target)
     putHr
     putStrLn "Writing qt.conf"
     putHr
@@ -238,17 +239,36 @@ makeWritable f = do
     perms <- getPermissions f
     setPermissions f (setOwnerWritable True perms)
 
--- |Uses 'cp' to copy a file to a destination, creating the target directory if necessary, and
--- ensuring that the result is owner-writable.
-cpWritable :: FilePath -- ^ Source file
-           -> FilePath -- ^ Target directory
-           -> Sh FilePath
-cpWritable lib targetDir = do
-    mkdir_p targetDir
-    cp lib targetDir
-    let targetFilePath = targetDir </> takeFileName lib
-    liftIO $ makeWritable targetFilePath
+data FollowSymlinks = KeepSymlinks | FollowSymlinks
+
+-- |Uses 'cp' to copy a file to a destination, ensuring that the result is owner-writable.
+-- If the target is an existing directory, the file is copied to that directory, otherwise
+-- the target is the new file path including file name. Ensures that the target directory
+-- exists in the latter case.
+cpPlus :: FollowSymlinks -- ^ Copy symlinks as symlinks or copy symlink target
+       -> FilePath       -- ^ Source file
+       -> FilePath       -- ^ Target file or directory
+       -> Sh FilePath
+cpPlus followSym src target = do
+    targetIsDir <- test_d target
+    let targetDir = if targetIsDir then target else takeDirectory target
+    let targetFilePath = if targetIsDir then target </> takeFileName src else target
+    unless targetIsDir $ mkdir_p targetDir
+    let cp' = do cp src targetFilePath; liftIO $ makeWritable targetFilePath
+        copyLink' = copyLink src targetFilePath
+    case followSym of
+        FollowSymlinks -> cp'
+        KeepSymlinks   -> ifM (test_s src) copyLink' cp'
     return targetFilePath
+    where ifM b t f = do b <- b; if b then t else f
+          copyLink src targetFilePath = do
+              linkTarget <- liftIO $ getSymbolicLinkTarget src
+              ifM (test_d (takeDirectory src </> linkTarget))
+                  (liftIO $ createDirectoryLink linkTarget targetFilePath)
+                  (liftIO $ createFileLink linkTarget targetFilePath)
+
+cpPlusKeep = cpPlus KeepSymlinks
+cpPlusFollow = cpPlus FollowSymlinks
 
 -- |Copies a library to target path and changes all references to a specified list of libraries.
 -- Logs the copy operation.
@@ -257,7 +277,8 @@ deployLib :: [FilePath] -- ^ List of library references to change, see 'chpaths'
           -> BinInfo    -- ^ Library to copy
           -> Sh ()
 deployLib pathsToChange target lib = do
-    targetFilePath <- logged cpWritable (getBinPath lib) target
+    mkdir_p target
+    targetFilePath <- logged cpPlusFollow (getBinPath lib) target
     chpaths pathsToChange (BinInfo targetFilePath (getDependencies lib))
 
 -- |The 'DeploymentInfo' type contains a list of files to be copied to a target directory.
@@ -276,7 +297,10 @@ deployLibs filter bundle infos = do
     echoHr
     echo "Copying libraries"
     echoHr
-    let copyInfo i = flip (logged cpWritable) (getTargetPath i) `traverse` getFiles i
+    -- create target directories
+    (mkdir_p . getTargetPath) `traverse_` infos
+    -- copy files from infos
+    let copyInfo i = flip (logged cpPlusFollow) (getTargetPath i) `traverse` getFiles i
     deployedFiles <- concat <$> copyInfo `traverse` infos
     echoHr
     echo "Deploying dependencies"
