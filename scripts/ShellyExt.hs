@@ -10,12 +10,13 @@ import System.FilePath hiding ((</>))
 -- If the paths do not have a common prefix, they are assumed to be located in the same root directory.
 makeRelativeEx :: FilePath -> FilePath -> FilePath
 makeRelativeEx from to = joinPath (dots ++ to')
-    where (from', to') = stripCommonPrefix (splitPath from) (splitPath to)
+    where (from', to') = stripCommonPrefix (noDot $ splitPath from) (noDot $ splitPath to)
           stripCommonPrefix [] bs                 = ([], bs)
           stripCommonPrefix as []                 = (as, [])
           stripCommonPrefix ass@(a:as) bss@(b:bs) = if a == b then stripCommonPrefix as bs
                                                               else (ass, bss)
           dots = ".." <$ from'
+          noDot = filter (\a -> a /= "." && a /= "./")
 
 -- |Copies a file from a source directory to a destination directory.
 -- The first argument is the copy action to perform, for example 'cp' or 'cp_r'.
