@@ -1,9 +1,13 @@
 #include "directorytree.h"
 
+#include "sqaction.h"
+
 #include <QComboBox>
 #include <QFileSystemModel>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QPalette>
+#include <QToolButton>
 #include <QTreeView>
 #include <QVBoxLayout>
 
@@ -43,7 +47,6 @@ DirectoryTree::DirectoryTree(const stream<QString> &sRootPath, sodium::stream<QS
     : m_dirSelector(new QComboBox)
     , m_dirTree(new QTreeView)
     , m_dirModel(new QFileSystemModel(this))
-    , m_rootPath(defaultRootPath())
     , m_path(QString())
 {
     auto vLayout = new QVBoxLayout;
@@ -54,9 +57,27 @@ DirectoryTree::DirectoryTree(const stream<QString> &sRootPath, sodium::stream<QS
     m_dirTree->setModel(m_dirModel);
     styleDirTree(m_dirTree);
 
-    layout()->addWidget(m_dirSelector);
-    layout()->addWidget(m_dirTree);
+    auto rootPathUpButton = new QToolButton;
+    rootPathUpButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    auto rootPathUp = new SQAction(tr(".."), rootPathUpButton);
+    rootPathUpButton->setDefaultAction(rootPathUp);
+
+    auto rootDirLayout = new QHBoxLayout;
+    rootDirLayout->setContentsMargins(0, 0, 0, 0);
+
+    rootDirLayout->addWidget(m_dirSelector, 10);
+    rootDirLayout->addWidget(rootPathUpButton);
+    vLayout->addLayout(rootDirLayout);
+    vLayout->addWidget(m_dirTree);
     setFocusProxy(m_dirTree);
+
+    const stream<QString> sRootPathUp = rootPathUp->sTriggered().snapshot(m_rootPath,
+                                                                          [](unit,
+                                                                             const QString &root) {
+                                                                              QDir dir(root);
+                                                                              dir.cdUp();
+                                                                              return dir.path();
+                                                                          });
 
     stream_sink<QString> sRootPathFromUI;
     connect(m_dirTree,
@@ -71,7 +92,7 @@ DirectoryTree::DirectoryTree(const stream<QString> &sRootPath, sodium::stream<QS
             [this, sRootPathFromUI](int index) {
                 sRootPathFromUI.send(m_dirSelector->itemData(index).toString());
             });
-    m_rootPath = sRootPathFromUI.or_else(sRootPath).hold(defaultRootPath());
+    m_rootPath.loop(sRootPathFromUI.or_else(sRootPath).or_else(sRootPathUp).hold(defaultRootPath()));
     m_unsubscribe += m_rootPath.listen(
         ensureSameThread<QString>(this, [this](const QString &p) { setRootPath(p); }));
 

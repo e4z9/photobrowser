@@ -28,7 +28,7 @@ private:
     QComboBox *m_dirSelector;
     QTreeView *m_dirTree;
     QFileSystemModel *m_dirModel;
-    sodium::cell<QString> m_rootPath;
+    sodium::cell_loop<QString> m_rootPath;
     sodium::cell<QString> m_path;
     Unsubscribe m_unsubscribe;
 };
