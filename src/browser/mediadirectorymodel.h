@@ -40,7 +40,6 @@ Q_DECLARE_METATYPE(MediaItem)
 QString durationToString(const qint64 durationMs);
 QString sizeToString(const qint64 size);
 
-DEFINE_BOOL_TYPE(VideosOnly)
 DEFINE_BOOL_TYPE(IsRecursive)
 
 class MediaDirectoryModel : public QAbstractItemModel
@@ -48,12 +47,18 @@ class MediaDirectoryModel : public QAbstractItemModel
     Q_OBJECT
 
 public:
+    struct Filter
+    {
+        QString regex;
+        bool videosOnly;
+    };
+
     enum class Role { Item = Qt::UserRole, Thumbnail, ShowDateDisplay, DateDisplay };
     enum class SortKey { ExifCreation, FileName, Random };
 
     MediaDirectoryModel(const sodium::cell<QString> &path,
                         const sodium::cell<IsRecursive> &isRecursive,
-                        const sodium::cell<VideosOnly> &videosOnly,
+                        const sodium::cell<Filter> &filter,
                         const sodium::cell<SortKey> &sortKey);
     ~MediaDirectoryModel() override;
 
@@ -84,7 +89,7 @@ private:
     mutable ThumbnailCreator m_thumbnailCreator;
     sodium::cell<QString> m_path;
     sodium::cell<IsRecursive> m_isRecursive;
-    sodium::cell<VideosOnly> m_videosOnly;
+    sodium::cell<Filter> m_filter;
     sodium::cell<SortKey> m_sortKey;
     sodium::stream_sink<sodium::unit> m_sLoadingStarted;
     sodium::stream_sink<sodium::unit> m_sLoadingFinished;

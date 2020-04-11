@@ -8,6 +8,7 @@
 #include <QDirIterator>
 #include <QImageReader>
 #include <QMimeDatabase>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <random>
@@ -105,11 +106,11 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 
 MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
                                          const cell<IsRecursive> &isRecursive,
-                                         const cell<VideosOnly> &videosOnly,
+                                         const sodium::cell<Filter> &filter,
                                          const cell<SortKey> &sortKey)
     : m_path(path)
     , m_isRecursive(isRecursive)
-    , m_videosOnly(videosOnly)
+    , m_filter(filter)
     , m_sortKey(sortKey)
 {
     connect(&m_thumbnailCreator,
@@ -140,7 +141,7 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
     m_unsubscribe += m_isRecursive.listen(post<IsRecursive>(this, [this](IsRecursive) {
         load(); /*trigger reload*/
     }));
-    m_unsubscribe += m_videosOnly.listen(post<VideosOnly>(this, [this](VideosOnly) {
+    m_unsubscribe += m_filter.listen(post<Filter>(this, [this](Filter) {
         load(); /*trigger reload*/
     }));
     m_unsubscribe += m_sortKey.listen(post<SortKey>(this, [this](SortKey key) { setSortKey(key); }));
@@ -163,7 +164,7 @@ static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &typ
 
 static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList> &fi,
                                const QString &path,
-                               VideosOnly videosOnly)
+                               MediaDirectoryModel::Filter filter)
 {
     // scraped from https://cgit.freedesktop.org/xdg/shared-mime-info/plain/freedesktop.org.xml.in
     static QList<QByteArray> videoMimeTypes = {"video/x-flv",
@@ -201,16 +202,23 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
     items.reserve(entryList.size());
     const QList<QByteArray> supported = QImageReader::supportedMimeTypes();
     const QMimeDatabase mdb;
+    const std::optional<QRegularExpression> regex
+        = filter.regex.isEmpty()
+              ? std::nullopt
+              : std::make_optional(
+                  QRegularExpression(filter.regex, QRegularExpression::CaseInsensitiveOption));
     for (const auto &entry : entryList) {
         if (fi.isCanceled())
             return {};
+        if (regex && !regex->match(entry.completeBaseName()).hasMatch())
+            continue;
         const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
         const auto mimeType = mdb.mimeTypeForFile(resolvedFilePath);
         if (mimeType.name() == "inode/directory")
             continue;
         MediaType type;
         if (containsMimeType(supported, mimeType)) {
-            if (videosOnly)
+            if (filter.videosOnly)
                 continue;
             type = MediaType::Image;
         } else if (containsMimeType(videoMimeTypes, mimeType)) {
@@ -237,7 +245,7 @@ void MediaDirectoryModel::load()
     cancelAndWait();
     const QString path = m_path.sample();
     const IsRecursive recursive = m_isRecursive.sample();
-    const VideosOnly showOption = m_videosOnly.sample();
+    const Filter showOption = m_filter.sample();
     const SortKey sortKey = m_sortKey.sample();
     beginResetModel();
     m_items.clear();

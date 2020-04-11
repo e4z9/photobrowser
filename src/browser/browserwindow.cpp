@@ -5,6 +5,7 @@
 #include "fullscreensplitter.h"
 #include "sqaction.h"
 #include "sqcheckbox.h"
+#include "sqlineedit.h"
 
 #include <util/fileutil.h>
 
@@ -12,6 +13,7 @@
 #include <QCheckBox>
 #include <QDesktopServices>
 #include <QEvent>
+#include <QLabel>
 #include <QMenuBar>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -258,17 +260,22 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     sRootPath.loop(sRootPathSettings);
     sPath.loop(sPathSettings);
 
+    auto filterInput = new SQLineEdit(QString());
+    filterInput->setClearButtonEnabled(true);
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
     auto recursiveCheckBox = new SQCheckBox(recursiveText, sIsRecursive, true);
     stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
     auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText, sVideosOnly, true);
 
     const auto cIsRecursive = recursiveCheckBox->cChecked().map(&IsRecursive::fromBool);
-    const auto cVideosOnly = videosOnlyCheckbox->cChecked().map(&VideosOnly::fromBool);
+    const auto cFilter = videosOnlyCheckbox->cChecked()
+                             .lift(filterInput->text(), [](bool b, const QString &t) {
+                                 return MediaDirectoryModel::Filter({t, b});
+                             });
     cell_loop<MediaDirectoryModel::SortKey> cSortKey;
     m_model = std::make_unique<MediaDirectoryModel>(m_fileTree->path(),
                                                     cIsRecursive,
-                                                    cVideosOnly,
+                                                    cFilter,
                                                     cSortKey);
 
     stream_loop<boost::optional<int>> sCurrentIndex;
@@ -288,9 +295,14 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     leftWidget->setLayout(leftLayout);
 
     auto bottomLeftWidget = new QWidget;
-    bottomLeftWidget->setLayout(new QVBoxLayout);
-    bottomLeftWidget->layout()->addWidget(recursiveCheckBox);
-    bottomLeftWidget->layout()->addWidget(videosOnlyCheckbox);
+    auto bottomLeftLayout = new QVBoxLayout;
+    bottomLeftWidget->setLayout(bottomLeftLayout);
+    auto filterLayout = new QHBoxLayout;
+    filterLayout->addWidget(new QLabel(tr("Name:")));
+    filterLayout->addWidget(filterInput);
+    bottomLeftLayout->addLayout(filterLayout);
+    bottomLeftLayout->addWidget(recursiveCheckBox);
+    bottomLeftLayout->addWidget(videosOnlyCheckbox);
 
     leftLayout->addWidget(m_fileTree, 10);
     leftLayout->addWidget(bottomLeftWidget);

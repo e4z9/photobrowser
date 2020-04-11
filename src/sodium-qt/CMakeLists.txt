@@ -5,6 +5,9 @@ add_library(sodium-qt STATIC
     sqaction.h
     sqcheckbox.cpp
     sqcheckbox.h
+    sqeditbase.h
+    sqlineedit.cpp
+    sqlineedit.h
     sqlistview.cpp
     sqlistview.h
     sqtimer.cpp
