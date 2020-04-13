@@ -2,6 +2,7 @@
 
 #include "gstreamer_utils.h"
 
+#include <util/util.h>
 #include <qtc/runextensions.h>
 
 #include <QGestureEvent>
@@ -382,6 +383,27 @@ void TimeDisplay::paintEvent(QPaintEvent *)
     paintDuration(&p, rect(), font(), palette(), m_timeString);
 }
 
+class ScreenSleepBlocker
+{
+public:
+    ScreenSleepBlocker(const cell<bool> &block);
+
+private:
+    Util::ScreenSleepBlocker m_blocker;
+    Unsubscribe m_unsubscribe;
+};
+
+ScreenSleepBlocker::ScreenSleepBlocker(const cell<bool> &block)
+    : m_blocker(ImageView::tr("playing video"))
+{
+    m_unsubscribe += calm(block).listen([this](bool block) {
+        if (block)
+            m_blocker.block();
+        else
+            m_blocker.unblock();
+    });
+}
+
 class VideoViewer : public QGraphicsView
 {
 public:
@@ -395,6 +417,7 @@ private:
     Unsubscribe m_unsubscribe;
     VideoGraphicsItem *m_item = nullptr;
     std::unique_ptr<VideoPlayer> m_player;
+    std::unique_ptr<ScreenSleepBlocker> m_screenSleepBlocker;
 };
 
 VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
@@ -417,6 +440,7 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
     const cell<std::optional<qint64>> duration = video.map(
         [](const OptionalMediaItem &i) { return i ? i->metaData.duration : std::nullopt; });
     m_player = std::make_unique<VideoPlayer>(uri, sTogglePlayVideo, sStepVideo);
+    m_screenSleepBlocker = std::make_unique<ScreenSleepBlocker>(m_player->isPlaying());
     m_item = new VideoGraphicsItem(m_player->frame());
     m_item->rectCallback = [this](const QRectF &r) {
         scene()->setSceneRect(r);

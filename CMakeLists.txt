@@ -16,6 +16,7 @@ find_package(SodiumCxx REQUIRED)
 if(APPLE)
     find_library(FWFoundation Foundation)
     find_library(FWAppKit AppKit)
+    find_library(FWIOKit IOKit)
 endif()
 
 add_subdirectory(src/util)
