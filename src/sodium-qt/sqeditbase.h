@@ -37,8 +37,13 @@ SQEditBase<Base>::SQEditBase(const sodium::stream<QString> &sText,
     m_text = calm(m_sUserChanges.or_else(sText).hold(initialText));
     // use m_text.sample in the potentially async listener,
     // in case a user change is posted in between
-    m_unsubscribe += m_text.listen(
-        post<QString>(this, [this](QString) { Base::setText(m_text.sample()); }));
+    m_unsubscribe += m_text.listen(post<QString>(this, [this](QString) {
+        // Setting the text changes the cursor position, so don't do it if text wouldn't change,
+        // which is for example the case for user changes
+        const QString text = m_text.sample();
+        if (text != Base::text())
+            Base::setText(m_text.sample());
+    }));
 }
 
 template<class Base>
