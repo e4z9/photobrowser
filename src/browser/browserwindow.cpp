@@ -363,6 +363,13 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     sRestoreSortKey.loop(m_settings.addInt(kSortKey, cSortKey));
     viewMenu->addMenu(sortMenu.menu);
 
+    auto filterByName = new SQAction(tr("Filter by Name"), viewMenu);
+    filterByName->setShortcut({"Ctrl+F"});
+    m_unsubscribe += filterByName->sTriggered().listen(post<unit>(filterInput, [filterInput](unit) {
+        filterInput->setFocus(Qt::OtherFocusReason);
+    }));
+    viewMenu->addAction(filterByName);
+
     viewMenu->addSeparator();
 
     sScale.loop(addScaleItems(viewMenu));
