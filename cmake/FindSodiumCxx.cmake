@@ -1,4 +1,4 @@
-find_package(boost REQUIRED)
+find_package(Boost REQUIRED)
 
 find_library(SodiumCxx_LIBRARIES NAMES libsodium.a) # hmpf
 find_path(SodiumCxx_INCLUDE_DIRS NAMES sodium/sodium.h)

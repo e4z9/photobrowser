@@ -31,7 +31,7 @@ set_target_properties(photobrowser PROPERTIES
     INSTALL_RPATH "@executable_path/../Frameworks"
 )
 
-target_link_libraries(photobrowser sodium-qt thirdparty_qtc util gstreamer)
+target_link_libraries(photobrowser sodium-qt thirdparty_qtc util gstreamer-1.0)
 
 install(TARGETS photobrowser
     BUNDLE
