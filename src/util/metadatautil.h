@@ -3,6 +3,7 @@
 #include <optional.h>
 
 #include <QDateTime>
+#include <QMatrix4x4>
 #include <QPixmap>
 #include <QSize>
 
@@ -29,7 +30,7 @@ public:
     Orientation orientation;
 };
 
-QMatrix matrixForOrientation(const QSize &size, Util::Orientation orientation);
+QMatrix4x4 matrixForOrientation(const QSize &size, Util::Orientation orientation);
 MetaData metaData(const QString &filePath);
 
 } // namespace Util

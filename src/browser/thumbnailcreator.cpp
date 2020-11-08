@@ -60,7 +60,7 @@ void createThumbnailImage(QFutureInterface<QImage> &fi,
         fi.reportResult(image);
         return;
     }
-    image = image.transformed(Util::matrixForOrientation(image.size(), orientation));
+    image = image.transformed(Util::matrixForOrientation(image.size(), orientation).toTransform());
     if (fi.isCanceled())
         return;
     fi.reportResult(restrictImageToSize(image, maxSize));

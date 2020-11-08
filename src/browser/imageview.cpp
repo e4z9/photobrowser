@@ -53,7 +53,7 @@ void paintDuration(QPainter *painter,
 static QImage imageForFilePath(const QString &filePath, Util::Orientation orientation)
 {
     QImage image(filePath);
-    return image.transformed(Util::matrixForOrientation(image.size(), orientation));
+    return image.transformed(Util::matrixForOrientation(image.size(), orientation).toTransform());
 }
 
 class VideoPlayer : public QObject

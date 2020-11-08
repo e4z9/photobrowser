@@ -33,7 +33,7 @@ static std::optional<QPixmap> extractExifThumbnail(const Exiv2::ExifData &exifDa
     // cut thumbnail to original's aspect ratio, some cameras do weird things
     if (pixmap.loadFromData(data.pData_, data.size_)) {
         const auto rotatedPixmap = pixmap.transformed(
-            Util::matrixForOrientation(pixmap.size(), orientation));
+            Util::matrixForOrientation(pixmap.size(), orientation).toTransform());
         if (rotatedPixmap.size().width() == 0 || rotatedPixmap.height() == 0
             || imageDimensions.width() == 0 || imageDimensions.height() == 0) {
             return {rotatedPixmap};
@@ -152,28 +152,28 @@ static QSize dimensions(const QSize &imageSize, Util::Orientation orientation)
 
 namespace Util {
 
-QMatrix matrixForOrientation(const QSize &size, Util::Orientation orientation)
+QMatrix4x4 matrixForOrientation(const QSize &size, Util::Orientation orientation)
 {
     // matrix to get from orientation back to normal
-    const auto maxx = qreal(size.width() - 1);
-    const auto maxy = qreal(size.height() - 1);
+    const auto maxx = float(size.width() - 1);
+    const auto maxy = float(size.height() - 1);
     switch (orientation) {
     case Util::Orientation::Normal:
         return {};
     case Util::Orientation::FlippedHorizontal:
-        return {-1, 0, 0, 1, maxx, 0};
+        return {-1, 0, 0, maxx, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     case Util::Orientation::Rotated180:
-        return {-1, 0, 0, -1, maxx, maxy};
+        return {-1, 0, 0, maxx, 0, -1, 0, maxy, 0, 0, 1, 0, 0, 0, 0, 1};
     case Util::Orientation::FlippedVertical:
-        return {1, 0, 0, -1, 0, maxy};
+        return {1, 0, 0, 0, 0, -1, 0, maxy, 0, 0, 1, 0, 0, 0, 0, 1};
     case Util::Orientation::RotatedClockwiseFlippedHorizontal:
-        return {0, 1, 1, 0, 0, 0};
+        return {0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     case Util::Orientation::RotatedAntiClockwise:
-        return {0, 1, -1, 0, maxx, 0};
+        return {0, -1, 0, maxx, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     case Util::Orientation::RotatedClockwiseFlippedVertical:
-        return {0, 1, -1, 0, maxx, 0};
+        return {0, -1, 0, maxx, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     case Util::Orientation::RotatedClockwise:
-        return {0, -1, 1, 0, 0, maxy};
+        return {0, 1, 0, 0, -1, 0, 0, maxy, 0, 0, 1, 0, 0, 0, 0, 1};
     }
     return {};
 }
