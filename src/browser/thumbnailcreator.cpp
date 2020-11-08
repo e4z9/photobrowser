@@ -129,8 +129,8 @@ void PictureThumbnailer::requestThumbnail(const QString &resolvedFilePath,
                [this, resolvedFilePath](const QFuture<QImage> &future) {
                    auto runningItem = std::find_if(m_running.begin(),
                                                    m_running.end(),
-                                                   [future](const RunningItem &item) {
-                                                       return item.second == future;
+                                                   [resolvedFilePath](const RunningItem &item) {
+                                                       return item.first == resolvedFilePath;
                                                    });
                    if (runningItem != m_running.end())
                        m_running.erase(runningItem);

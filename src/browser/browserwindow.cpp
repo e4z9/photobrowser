@@ -10,6 +10,7 @@
 #include <util/fileutil.h>
 
 #include <QAction>
+#include <QActionGroup>
 #include <QCheckBox>
 #include <QDesktopServices>
 #include <QEvent>

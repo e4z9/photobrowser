@@ -237,7 +237,7 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                          metaData,
                          type});
     }
-    return std::move(items);
+    return items;
 }
 
 void MediaDirectoryModel::load()
@@ -478,7 +478,7 @@ QString MediaItem::windowTitle() const
         .arg(fileName,
              metaData.duration ? (" - " + durationToString(*metaData.duration)) : QString(),
              dt.date().toString("ddd"),
-             dt.toString(Qt::SystemLocaleLongDate));
+             dt.toString(Qt::TextDate));
 }
 
 bool isMediaItem(const OptionalMediaItem &item)
