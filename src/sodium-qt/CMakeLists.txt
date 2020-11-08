@@ -17,5 +17,5 @@ add_library(sodium-qt STATIC
 )
 
 target_include_directories(sodium-qt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(sodium-qt PUBLIC Qt5::Widgets SodiumCxx)
+target_link_libraries(sodium-qt PUBLIC ${Qt}::Widgets SodiumCxx)
 

@@ -10,7 +10,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(Exiv2 REQUIRED)
-find_package(Qt5 COMPONENTS Core Gui Widgets REQUIRED)
+
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
+set(Qt "Qt${QT_VERSION_MAJOR}")
+find_package(${Qt} COMPONENTS Core Gui Widgets REQUIRED)
+
 find_package(SodiumCxx REQUIRED)
 
 if(APPLE)

@@ -39,7 +39,7 @@ install(TARGETS photobrowser
     COMPONENT deploy
 )
 
-get_target_property(_moc_binary Qt5::moc IMPORTED_LOCATION)
+get_target_property(_moc_binary ${Qt}::moc IMPORTED_LOCATION)
 get_filename_component(_qt_bin_path "${_moc_binary}" DIRECTORY)
 get_filename_component(_qt_path "${_qt_bin_path}/../" ABSOLUTE)
 
