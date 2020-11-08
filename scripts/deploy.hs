@@ -8,7 +8,7 @@
   --package text
 -}
 
--- Run with "stack deploy_shelly.hs -q <qt_path> -t <target_app_bundle>"
+-- Run with "stack deploy.hs -q <qt_path> -t <target_app_bundle>"
 
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
