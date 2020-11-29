@@ -235,11 +235,29 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
     const stream<qint64> sBackward = stepBackward->sTriggered().map(
         [](unit) { return qint64(-10000); });
 
+    auto smallStepForward = new SQAction(BrowserWindow::tr("Small Step Forward"),
+                                         videoItemSelected,
+                                         videoMenu);
+    smallStepForward->setShortcut({"L"});
+    const stream<qint64> sSmallForward = smallStepForward->sTriggered().map(
+        [](unit) { return qint64(1000); });
+
+    auto smallStepBackward = new SQAction(BrowserWindow::tr("Small Step Backward"),
+                                          videoItemSelected,
+                                          videoMenu);
+    smallStepBackward->setShortcut({"K"});
+    const stream<qint64> sSmallBackward = smallStepBackward->sTriggered().map(
+        [](unit) { return qint64(-1000); });
+
     videoMenu->addAction(playStop);
     videoMenu->addAction(stepForward);
     videoMenu->addAction(stepBackward);
+    videoMenu->addAction(smallStepForward);
+    videoMenu->addAction(smallStepBackward);
 
-    return {videoMenu, playStop->sTriggered(), sForward.or_else(sBackward)};
+    return {videoMenu,
+            playStop->sTriggered(),
+            sForward.or_else(sBackward).or_else(sSmallForward).or_else(sSmallBackward)};
 }
 
 BrowserWindow::BrowserWindow(QWidget *parent)
