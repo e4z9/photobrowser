@@ -385,6 +385,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     filterByName->setShortcut({"Ctrl+F"});
     m_unsubscribe += filterByName->sTriggered().listen(post<unit>(filterInput, [filterInput](unit) {
         filterInput->setFocus(Qt::OtherFocusReason);
+        filterInput->selectAll();
     }));
     viewMenu->addAction(filterByName);
 
