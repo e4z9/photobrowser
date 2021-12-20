@@ -371,7 +371,7 @@ private:
     {
         // invalidates data, which is moved into the call
         runAsyncImpl(futureInterface, std::move(std::get<index>(data))...);
-        if (futureInterface.isPaused())
+        if (futureInterface.isSuspended())
             futureInterface.waitForResume();
         futureInterface.reportFinished();
     }
