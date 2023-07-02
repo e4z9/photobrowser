@@ -317,7 +317,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto bottomLeftLayout = new QVBoxLayout;
     bottomLeftWidget->setLayout(bottomLeftLayout);
     auto filterLayout = new QHBoxLayout;
-    filterLayout->addWidget(new QLabel(tr("Name:")));
+    filterLayout->addWidget(new QLabel(tr("Search:")));
     filterLayout->addWidget(filterInput);
     bottomLeftLayout->addLayout(filterLayout);
     bottomLeftLayout->addWidget(recursiveCheckBox);
@@ -381,13 +381,13 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     sRestoreSortKey.loop(m_settings.addInt(kSortKey, cSortKey));
     viewMenu->addMenu(sortMenu.menu);
 
-    auto filterByName = new SQAction(tr("Filter by Name"), viewMenu);
-    filterByName->setShortcut({"Ctrl+F"});
-    m_unsubscribe += filterByName->sTriggered().listen(post<unit>(filterInput, [filterInput](unit) {
+    auto filter = new SQAction(tr("Search"), viewMenu);
+    filter->setShortcut({"Ctrl+F"});
+    m_unsubscribe += filter->sTriggered().listen(post<unit>(filterInput, [filterInput](unit) {
         filterInput->setFocus(Qt::OtherFocusReason);
         filterInput->selectAll();
     }));
-    viewMenu->addAction(filterByName);
+    viewMenu->addAction(filter);
 
     viewMenu->addSeparator();
 

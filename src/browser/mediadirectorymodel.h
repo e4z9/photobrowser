@@ -49,7 +49,7 @@ class MediaDirectoryModel : public QAbstractItemModel
 public:
     struct Filter
     {
-        QString regex;
+        QString searchString;
         bool videosOnly;
     };
 

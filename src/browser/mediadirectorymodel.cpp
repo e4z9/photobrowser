@@ -202,15 +202,34 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
     items.reserve(entryList.size());
     const QList<QByteArray> supported = QImageReader::supportedMimeTypes();
     const QMimeDatabase mdb;
-    const std::optional<QRegularExpression> regex
-        = filter.regex.isEmpty()
-              ? std::nullopt
-              : std::make_optional(
-                  QRegularExpression(filter.regex, QRegularExpression::CaseInsensitiveOption));
+    const auto regexesFromString = [](const QString &s) {
+        static const QRegularExpression whiteSpace("\\s+");
+        const auto strings = s.split(whiteSpace);
+        QList<QRegularExpression> result;
+        std::transform(strings.cbegin(),
+                       strings.cend(),
+                       std::back_inserter(result),
+                       [](const QString &s) {
+                           return QRegularExpression(s, QRegularExpression::CaseInsensitiveOption);
+                       });
+        return result;
+    };
+    const std::optional<QList<QRegularExpression>> regexes = filter.searchString.isEmpty()
+                                                                 ? std::nullopt
+                                                                 : std::make_optional(
+                                                                     regexesFromString(
+                                                                         filter.searchString));
+    const auto passesFilter = [regexes](const QFileInfo &entry) {
+        if (!regexes)
+            return true;
+        return std::all_of(regexes->cbegin(), regexes->cend(), [entry](const auto &rx) {
+            return rx.match(entry.completeBaseName()).hasMatch();
+        });
+    };
     for (const auto &entry : entryList) {
         if (fi.isCanceled())
             return {};
-        if (regex && !regex->match(entry.completeBaseName()).hasMatch())
+        if (!passesFilter(entry))
             continue;
         const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
         const auto mimeType = mdb.mimeTypeForFile(resolvedFilePath);
