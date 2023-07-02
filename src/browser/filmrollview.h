@@ -10,10 +10,10 @@
 #include <QTimer>
 #include <QWidget>
 
-#include <memory>
-#include <optional.h>
-
 #include <sodium/sodium.h>
+
+#include <memory>
+#include <optional>
 
 class Fotoroll;
 class FullscreenSplitter;

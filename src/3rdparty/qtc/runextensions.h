@@ -26,7 +26,6 @@
 #pragma once
 
 #include "functiontraits.h"
-#include "optional.h"
 
 #include <QCoreApplication>
 #include <QFuture>
@@ -37,6 +36,7 @@
 #include <QThreadPool>
 
 #include <functional>
+#include <optional>
 
 using namespace std;
 

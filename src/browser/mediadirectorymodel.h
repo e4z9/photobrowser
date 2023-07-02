@@ -10,9 +10,9 @@
 #include <QDateTime>
 #include <QFutureWatcher>
 
-#include <optional.h>
-
 #include <sodium/sodium.h>
+
+#include <optional>
 
 enum class MediaType { Image, Video };
 

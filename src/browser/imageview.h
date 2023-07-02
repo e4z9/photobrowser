@@ -7,10 +7,9 @@
 
 #include <QWidget>
 
-#include <optional.h>
-
 #include <sodium/sodium.h>
 
+#include <optional>
 #include <unordered_map>
 
 QT_BEGIN_NAMESPACE
