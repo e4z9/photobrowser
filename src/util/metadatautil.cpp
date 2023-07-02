@@ -31,7 +31,7 @@ static std::optional<QPixmap> extractExifThumbnail(const Exiv2::ExifData &exifDa
     const Exiv2::DataBuf &data = thumb.copy();
     QPixmap pixmap;
     // cut thumbnail to original's aspect ratio, some cameras do weird things
-    if (pixmap.loadFromData(data.pData_, data.size_)) {
+    if (pixmap.loadFromData(data.c_data(), data.size())) {
         const auto rotatedPixmap = pixmap.transformed(
             Util::matrixForOrientation(pixmap.size(), orientation).toTransform());
         if (rotatedPixmap.size().width() == 0 || rotatedPixmap.height() == 0
@@ -73,7 +73,7 @@ static Util::Orientation extractExifOrientation(const Exiv2::ExifData &exifData)
     const Exiv2::ExifKey key("Exif.Image.Orientation");
     const auto md = exifData.findKey(key);
     if (md != exifData.end() && md->typeId() == Exiv2::unsignedShort)
-        return Util::Orientation(md->toLong());
+        return Util::Orientation(md->toUint32());
     return Util::Orientation::Normal;
 }
 
@@ -87,7 +87,7 @@ static std::optional<QSize> extractExifPixelDimensions(const Exiv2::ExifData &ex
     const auto ymd = exifData.findKey(ykey);
     if (xmd != exifData.end() && xmd->typeId() == Exiv2::unsignedLong && ymd != exifData.end()
         && ymd->typeId() == Exiv2::unsignedLong)
-        return QSize(xmd->toLong(), ymd->toLong());
+        return QSize(xmd->toInt64(), ymd->toInt64());
     return {};
 }
 

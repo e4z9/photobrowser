@@ -9,7 +9,7 @@ add_library(util STATIC
 )
 
 target_include_directories(util PUBLIC .. ../3rdparty)
-target_link_libraries(util PUBLIC ${Qt}::Core ${Qt}::Gui Exiv2)
+target_link_libraries(util PUBLIC ${Qt}::Core ${Qt}::Gui exiv2lib)
 
 if(APPLE)
     target_sources(util PRIVATE
