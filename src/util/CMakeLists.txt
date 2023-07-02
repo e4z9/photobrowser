@@ -5,6 +5,8 @@ add_library(util STATIC
     fileutil.h
     metadatautil.cpp
     metadatautil.h
+    tags.cpp
+    tags.h
     util.h
 )
 
@@ -22,3 +24,19 @@ else()
         util.cpp
     )
 endif(APPLE)
+
+# PlistCpp
+find_package(Boost REQUIRED)
+
+target_sources(util
+  PRIVATE
+    ../3rdparty/PlistCpp/src/Plist.cpp
+    ../3rdparty/PlistCpp/src/Plist.hpp
+    ../3rdparty/PlistCpp/src/base64.hpp
+    ../3rdparty/PlistCpp/src/PlistDate.cpp
+    ../3rdparty/PlistCpp/src/PlistDate.hpp
+    ../3rdparty/PlistCpp/src/pugiconfig.hpp
+    ../3rdparty/PlistCpp/src/pugixml.cpp
+    ../3rdparty/PlistCpp/src/pugixml.hpp
+)
+target_include_directories(util PRIVATE ../3rdparty/PlistCpp/src ${Boost_INCLUDE_DIR})

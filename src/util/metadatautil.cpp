@@ -1,5 +1,7 @@
 #include "metadatautil.h"
 
+#include "tags.h"
+
 #include <QPainter>
 
 #include <exiv2/exiv2.hpp>
@@ -206,6 +208,8 @@ MetaData metaData(const QString &filePath)
         data.thumbnail = extractExifThumbnail(exifData,
                                               data.dimensions ? *data.dimensions : QSize(),
                                               data.orientation);
+
+        data.tags = getTags(filePath);
         return data;
     } catch (...) {
     }

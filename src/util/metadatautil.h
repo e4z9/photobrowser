@@ -4,8 +4,10 @@
 #include <QMatrix4x4>
 #include <QPixmap>
 #include <QSize>
+#include <QString>
 
 #include <optional>
+#include <vector>
 
 namespace Util {
 
@@ -28,6 +30,7 @@ public:
     std::optional<QPixmap> thumbnail;
     std::optional<qint64> duration;
     Orientation orientation;
+    QList<QString> tags;
 };
 
 QMatrix4x4 matrixForOrientation(const QSize &size, Util::Orientation orientation);

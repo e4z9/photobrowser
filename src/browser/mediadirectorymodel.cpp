@@ -344,6 +344,17 @@ int MediaDirectoryModel::columnCount(const QModelIndex &parent) const
     return parent.isValid() ? 0 : 1;
 }
 
+static QString tagString(const Util::MetaData &metaData)
+{
+    QList<QString> singleLine;
+    // cut off second line for colors (which have color number on second line)
+    std::transform(metaData.tags.cbegin(),
+                   metaData.tags.cend(),
+                   std::back_inserter(singleLine),
+                   [](const QString &s) { return s.left(s.indexOf('\n')); });
+    return singleLine.join(", ");
+}
+
 static QString toolTip(const MediaItem &item)
 {
     static constexpr char format[] = "dd.MM.yyyy HH:mm:ss";
@@ -374,6 +385,7 @@ static QString toolTip(const MediaItem &item)
     addEmptyRow();
     addRow(MediaDirectoryModel::tr("Created:"), item.created.toString(format));
     addRow(MediaDirectoryModel::tr("Modified:"), item.lastModified.toString(format));
+    addRow(MediaDirectoryModel::tr("Tags:"), tagString(item.metaData));
     tooltip += "</table>";
     tooltip += "</body></html>";
     return tooltip;
