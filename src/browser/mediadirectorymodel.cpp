@@ -210,7 +210,9 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                        strings.cend(),
                        std::back_inserter(result),
                        [](const QString &s) {
-                           return QRegularExpression(s, QRegularExpression::CaseInsensitiveOption);
+                           return QRegularExpression(s,
+                                                     QRegularExpression::CaseInsensitiveOption
+                                                         | QRegularExpression::MultilineOption);
                        });
         return result;
     };
@@ -219,18 +221,18 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                                                                  : std::make_optional(
                                                                      regexesFromString(
                                                                          filter.searchString));
-    const auto passesFilter = [regexes](const QFileInfo &entry) {
+    const auto passesFilter = [regexes](const QList<QString> &entries) {
         if (!regexes)
             return true;
-        return std::all_of(regexes->cbegin(), regexes->cend(), [entry](const auto &rx) {
-            return rx.match(entry.completeBaseName()).hasMatch();
+        return std::all_of(regexes->cbegin(), regexes->cend(), [entries](const auto &rx) {
+            return std::any_of(entries.cbegin(), entries.cend(), [rx](const QString &entry) {
+                return rx.match(entry).hasMatch();
+            });
         });
     };
     for (const auto &entry : entryList) {
         if (fi.isCanceled())
             return {};
-        if (!passesFilter(entry))
-            continue;
         const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
         const auto mimeType = mdb.mimeTypeForFile(resolvedFilePath);
         if (mimeType.name() == "inode/directory")
@@ -247,6 +249,8 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
         }
         QFileInfo fi(resolvedFilePath);
         const auto metaData = Util::metaData(resolvedFilePath);
+        if (!passesFilter(metaData.tags + QList{entry.completeBaseName()}))
+            continue;
         items.push_back({entry.fileName(),
                          entry.filePath(),
                          resolvedFilePath,
