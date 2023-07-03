@@ -13,7 +13,7 @@ find_package(exiv2 REQUIRED)
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
 set(Qt "Qt${QT_VERSION_MAJOR}")
-find_package(${Qt} COMPONENTS Core Gui Widgets REQUIRED)
+find_package(${Qt} COMPONENTS Core Gui Widgets Concurrent REQUIRED)
 
 find_package(SodiumCxx REQUIRED)
 

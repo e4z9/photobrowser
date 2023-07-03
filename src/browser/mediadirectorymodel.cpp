@@ -9,11 +9,14 @@
 #include <QImageReader>
 #include <QMimeDatabase>
 #include <QRegularExpression>
+#include <QtConcurrent/QtConcurrent>
 
 #include <algorithm>
 #include <random>
 
 using namespace sodium;
+
+Q_GLOBAL_STATIC(QThreadPool, sThreadPool);
 
 namespace {
 
@@ -196,70 +199,80 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                                                "video/x-msvideo",
                                                "video/x-nsv",
                                                "video/x-sgi-movie"};
-    const QDir dir(path);
-    const auto entryList = dir.entryInfoList(QDir::Files);
-    MediaItems items;
-    items.reserve(entryList.size());
     const QList<QByteArray> supported = QImageReader::supportedMimeTypes();
     const QMimeDatabase mdb;
-    const auto regexesFromString = [](const QString &s) {
-        static const QRegularExpression whiteSpace("\\s+");
-        const auto strings = s.split(whiteSpace);
-        QList<QRegularExpression> result;
-        std::transform(strings.cbegin(),
-                       strings.cend(),
-                       std::back_inserter(result),
-                       [](const QString &s) {
-                           return QRegularExpression(s,
-                                                     QRegularExpression::CaseInsensitiveOption
-                                                         | QRegularExpression::MultilineOption);
-                       });
-        return result;
-    };
-    const std::optional<QList<QRegularExpression>> regexes = filter.searchString.isEmpty()
-                                                                 ? std::nullopt
-                                                                 : std::make_optional(
-                                                                     regexesFromString(
-                                                                         filter.searchString));
-    const auto passesFilter = [regexes](const QList<QString> &entries) {
-        if (!regexes)
-            return true;
-        return std::all_of(regexes->cbegin(), regexes->cend(), [entries](const auto &rx) {
-            return std::any_of(entries.cbegin(), entries.cend(), [rx](const QString &entry) {
-                return rx.match(entry).hasMatch();
-            });
+    const QDir dir(path);
+    const auto entryList = dir.entryInfoList(QDir::Files);
+    QList<std::optional<MediaItem>> optItems = QtConcurrent::blockingMapped(
+        sThreadPool,
+        entryList,
+        [filter, &mdb, fi, supported](const QFileInfo &entry) -> std::optional<MediaItem> {
+            const auto regexesFromString = [](const QString &s) {
+                static const QRegularExpression whiteSpace("\\s+");
+                const auto strings = s.split(whiteSpace);
+                QList<QRegularExpression> result;
+                std::transform(strings.cbegin(),
+                               strings.cend(),
+                               std::back_inserter(result),
+                               [](const QString &s) {
+                                   return QRegularExpression(
+                                       s,
+                                       QRegularExpression::CaseInsensitiveOption
+                                           | QRegularExpression::MultilineOption);
+                               });
+                return result;
+            };
+            const std::optional<QList<QRegularExpression>> regexes
+                = filter.searchString.isEmpty()
+                      ? std::nullopt
+                      : std::make_optional(regexesFromString(filter.searchString));
+            const auto passesFilter = [regexes](const QList<QString> &entries) {
+                if (!regexes)
+                    return true;
+                return std::all_of(regexes->cbegin(), regexes->cend(), [entries](const auto &rx) {
+                    return std::any_of(entries.cbegin(), entries.cend(), [rx](const QString &entry) {
+                        return rx.match(entry).hasMatch();
+                    });
+                });
+            };
+            if (fi.isCanceled())
+                return {};
+            const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
+            const auto mimeType = mdb.mimeTypeForFile(resolvedFilePath);
+            if (mimeType.name() == "inode/directory")
+                return {};
+            MediaType type;
+            if (containsMimeType(supported, mimeType)) {
+                if (filter.videosOnly)
+                    return {};
+                type = MediaType::Image;
+            } else if (containsMimeType(videoMimeTypes, mimeType)) {
+                type = MediaType::Video;
+            } else {
+                return {};
+            }
+            QFileInfo fi(resolvedFilePath);
+            const auto metaData = Util::metaData(resolvedFilePath);
+            if (!passesFilter(metaData.tags + QList{entry.completeBaseName()}))
+                return {};
+            return std::make_optional<MediaItem>({entry.fileName(),
+                                                  entry.filePath(),
+                                                  resolvedFilePath,
+                                                  fi.birthTime(),
+                                                  fi.lastModified(),
+                                                  std::nullopt,
+                                                  metaData,
+                                                  type});
         });
-    };
-    for (const auto &entry : entryList) {
-        if (fi.isCanceled())
-            return {};
-        const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
-        const auto mimeType = mdb.mimeTypeForFile(resolvedFilePath);
-        if (mimeType.name() == "inode/directory")
-            continue;
-        MediaType type;
-        if (containsMimeType(supported, mimeType)) {
-            if (filter.videosOnly)
-                continue;
-            type = MediaType::Image;
-        } else if (containsMimeType(videoMimeTypes, mimeType)) {
-            type = MediaType::Video;
-        } else {
-            continue;
-        }
-        QFileInfo fi(resolvedFilePath);
-        const auto metaData = Util::metaData(resolvedFilePath);
-        if (!passesFilter(metaData.tags + QList{entry.completeBaseName()}))
-            continue;
-        items.push_back({entry.fileName(),
-                         entry.filePath(),
-                         resolvedFilePath,
-                         fi.birthTime(),
-                         fi.lastModified(),
-                         std::nullopt,
-                         metaData,
-                         type});
-    }
+
+    optItems.erase(std::remove_if(optItems.begin(),
+                                  optItems.end(),
+                                  [](const std::optional<MediaItem> &i) { return !i; }),
+                   optItems.end());
+    MediaItems items;
+    std::transform(optItems.cbegin(), optItems.cend(), std::back_inserter(items), [](const auto &i) {
+        return *i;
+    });
     return items;
 }
 
