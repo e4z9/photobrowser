@@ -6,6 +6,19 @@
 
 #include <exiv2/exiv2.hpp>
 
+static std::optional<int> getIntFromStringXmp(const Exiv2::XmpData &data, const std::string &key)
+{
+    const Exiv2::XmpKey xkey(key);
+    const auto xmd = data.findKey(xkey);
+    if (xmd != data.end() && xmd->typeId() == Exiv2::xmpText) {
+        bool ok;
+        const int val = QString::fromStdString(xmd->toString()).toInt(&ok);
+        if (ok)
+            return val;
+    }
+    return {};
+}
+
 static std::optional<QDateTime> extractExifCreationDateTime(const Exiv2::ExifData &exifData)
 {
     if (exifData.empty())
@@ -114,19 +127,14 @@ static std::optional<QSize> extractXmpDimensions(const Exiv2::XmpData &data)
 {
     if (data.empty())
         return {};
-    const Exiv2::XmpKey xkey("Xmp.video.Width");
-    const auto xmd = data.findKey(xkey);
-    const Exiv2::XmpKey ykey("Xmp.video.Height");
-    const auto ymd = data.findKey(ykey);
-    if (xmd != data.end() && xmd->typeId() == Exiv2::xmpText && ymd != data.end()
-        && ymd->typeId() == Exiv2::xmpText) {
-        bool xok;
-        const int width = QString::fromStdString(xmd->toString()).toInt(&xok);
-        bool yok;
-        const int height = QString::fromStdString(ymd->toString()).toInt(&yok);
-        if (xok && yok)
-            return QSize(width, height);
-    }
+    const std::optional<int> sourceWidth = getIntFromStringXmp(data, "Xmp.video.SourceImageWidth");
+    const std::optional<int> sourceHeight = getIntFromStringXmp(data, "Xmp.video.SourceImageHeight");
+    if (sourceWidth && sourceHeight)
+        return QSize(*sourceWidth, *sourceHeight);
+    const std::optional<int> videoWidth = getIntFromStringXmp(data, "Xmp.video.Width");
+    const std::optional<int> videoHeight = getIntFromStringXmp(data, "Xmp.video.Height");
+    if (videoWidth && videoHeight)
+        return QSize(*videoWidth, *videoHeight);
     return {};
 }
 
