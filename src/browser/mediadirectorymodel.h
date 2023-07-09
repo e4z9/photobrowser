@@ -28,6 +28,7 @@ public:
     Util::MetaData metaData;
     MediaType type;
 
+    mutable QDateTime cachedCreatedDateTime;
     const QDateTime &createdDateTime() const;
     QString windowTitle() const;
 };

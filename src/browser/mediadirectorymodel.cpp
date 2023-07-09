@@ -504,19 +504,26 @@ QString sizeToString(const qint64 size)
 
 const QDateTime &MediaItem::createdDateTime() const
 {
-    if (metaData.created) {
-        if (created.isValid()) {
-            // hack for devices that write local datetimes into UTC datetime metadata...
-            const QDateTime createdUTC = metaData.created->toUTC();
-            const QDateTime createdUTCInLocal(createdUTC.date(), createdUTC.time(), Qt::LocalTime);
-            if (std::abs(createdUTCInLocal.secsTo(created)) < 5)
-                return created;
+    const auto calculatedCreatedDateTime = [this] {
+        if (metaData.created) {
+            if (created.isValid()) {
+                // hack for devices that write local datetimes into UTC datetime metadata...
+                const QDateTime createdUTC = metaData.created->toUTC();
+                const QDateTime createdUTCInLocal(createdUTC.date(),
+                                                  createdUTC.time(),
+                                                  Qt::LocalTime);
+                if (std::abs(createdUTCInLocal.secsTo(created)) < 5)
+                    return created;
+            }
+            return *metaData.created;
         }
-        return *metaData.created;
-    }
-    if (created.isValid())
-        return created;
-    return lastModified;
+        if (created.isValid())
+            return created;
+        return lastModified;
+    };
+    if (!cachedCreatedDateTime.isValid())
+        cachedCreatedDateTime = calculatedCreatedDateTime();
+    return cachedCreatedDateTime;
 }
 
 QString MediaItem::windowTitle() const
