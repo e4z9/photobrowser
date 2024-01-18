@@ -1,24 +1,22 @@
 #pragma once
 
-#include "sqtools.h"
+#include "sqwidgetbase.h"
 
 #include <QCheckBox>
 
 #include <sodium/sodium.h>
 
-class SQCheckBox : public QCheckBox
+class SQCheckBox : public SQWidgetBase<QCheckBox>
 {
 public:
-    SQCheckBox(const sodium::cell<QString> &text);
-    SQCheckBox(const sodium::cell<QString> &text, const sodium::cell<bool> &enabled);
-    SQCheckBox(const sodium::cell<QString> &text,
-               const sodium::stream<bool> &sChecked,
-               const sodium::cell<bool> &enabled);
+    explicit SQCheckBox(QWidget *parent = nullptr);
+
+    void text(const sodium::cell<QString> &text);
+    void checked(const sodium::stream<bool> &sChecked);
 
     const sodium::stream<bool> sChecked() const;
     const sodium::cell<bool> &cChecked() const;
 
 private:
     sodium::cell<bool> m_isChecked;
-    Unsubscribe m_unsubscribe;
 };

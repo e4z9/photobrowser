@@ -15,6 +15,7 @@ public:
     explicit SQWidgetBase(QWidget *parent);
 
     void visible(const sodium::cell<bool> &visible);
+    void enabled(const sodium::cell<bool> &enabled);
 
     void font(const sodium::cell<QFont> &font);
     const sodium::cell<QFont> &font() const { return m_font; }
@@ -31,6 +32,8 @@ protected:
     sodium::cell_sink<QSize> m_size;
     Unsubscribe m_unsubscribe;
 };
+
+// ---------------------- IMPLEMENTATION ----------------------
 
 template<class Base>
 SQWidgetBase<Base>::SQWidgetBase()
@@ -51,6 +54,14 @@ void SQWidgetBase<Base>::visible(const sodium::cell<bool> &visible)
     m_unsubscribe.insert_or_assign("visible",
                                    visible.listen(
                                        ensureSameThread<bool>(this, &QWidget::setVisible)));
+}
+
+template<class Base>
+void SQWidgetBase<Base>::enabled(const sodium::cell<bool> &enabled)
+{
+    m_unsubscribe.insert_or_assign("enabled",
+                                   enabled.listen(
+                                       ensureSameThread<bool>(this, &QWidget::setEnabled)));
 }
 
 template<class Base>

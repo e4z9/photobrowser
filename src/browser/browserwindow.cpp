@@ -286,9 +286,13 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto filterInput = new SQLineEdit(QString());
     filterInput->setClearButtonEnabled(true);
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
-    auto recursiveCheckBox = new SQCheckBox(recursiveText, sIsRecursive, true);
+    auto recursiveCheckBox = new SQCheckBox;
+    recursiveCheckBox->text(recursiveText);
+    recursiveCheckBox->checked(sIsRecursive);
     stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
-    auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText, sVideosOnly, true);
+    auto videosOnlyCheckbox = new SQCheckBox;
+    videosOnlyCheckbox->text(videosOnlyText);
+    videosOnlyCheckbox->checked(sVideosOnly);
 
     const auto cIsRecursive = recursiveCheckBox->cChecked().map(&IsRecursive::fromBool);
     const auto cFilter = videosOnlyCheckbox->cChecked()
