@@ -283,7 +283,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     sRootPath.loop(sRootPathSettings);
     sPath.loop(sPathSettings);
 
-    auto filterInput = new SQLineEdit(QString());
+    auto filterInput = new SQLineEdit;
     filterInput->setClearButtonEnabled(true);
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
     auto recursiveCheckBox = new SQCheckBox;
