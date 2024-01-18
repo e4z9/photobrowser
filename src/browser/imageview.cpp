@@ -2,6 +2,7 @@
 
 #include "gstreamer_utils.h"
 
+#include <sqwidgetbase.h>
 #include <util/util.h>
 #include <qtc/runextensions.h>
 
@@ -314,7 +315,7 @@ void VideoGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem 
         painter->drawImage(boundingRect(), *i);
 }
 
-class PlayIcon : public SQWidgetWrapper<QWidget>
+class PlayIcon : public SQWidgetBase<QWidget>
 {
 public:
     PlayIcon(const cell<bool> &visible);
@@ -323,9 +324,10 @@ protected:
     void paintEvent(QPaintEvent *pe) override;
 };
 
-PlayIcon::PlayIcon(const cell<bool> &visible)
-    : SQWidgetWrapper<QWidget>(visible)
-{}
+PlayIcon::PlayIcon(const cell<bool> &v)
+{
+    visible(v);
+}
 
 void PlayIcon::paintEvent(QPaintEvent *)
 {

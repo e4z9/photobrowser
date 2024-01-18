@@ -341,11 +341,11 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                                 m_model->sLoadingFinished());
     m_progressTimer->setInterval(50);
     m_progressTimer->setSingleShot(true);
-    m_progressIndicator = new SProgressIndicator(
-        m_progressTimer->sTimeout()
-            .map_to(true)
-            .or_else(m_model->sLoadingFinished().map_to(false))
-            .hold(false));
+    m_progressIndicator = new SProgressIndicator;
+    m_progressIndicator->visible(m_progressTimer->sTimeout()
+                                     .map_to(true)
+                                     .or_else(m_model->sLoadingFinished().map_to(false))
+                                     .hold(false));
     m_progressIndicator->setParent(leftWidget);
     adaptProgressIndicator();
 

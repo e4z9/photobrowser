@@ -5,6 +5,7 @@
 #include <sqaction.h>
 #include <sqtimer.h>
 #include <sqtools.h>
+#include <sqwidgetbase.h>
 
 #include <qtc/progressindicator.h>
 
@@ -50,7 +51,7 @@ public:
         : Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Small)
     {}
 };
-using SProgressIndicator = SQWidgetWrapper<PI>;
+using SProgressIndicator = SQWidgetBase<PI>;
 
 class BrowserWindow : public QMainWindow
 {

@@ -11,7 +11,8 @@ template<class Base>
 class SQWidgetBase : public Base
 {
 public:
-    explicit SQWidgetBase(QWidget *parent = nullptr);
+    SQWidgetBase();
+    explicit SQWidgetBase(QWidget *parent);
 
     void visible(const sodium::cell<bool> &visible);
 
@@ -23,13 +24,19 @@ public:
     void geometry(const sodium::cell<QRect> &geometry);        // for setGeometry
     const sodium::cell<QSize> &size() const { return m_size; } // actual size from resizeEvent
 
-    void resizeEvent(QResizeEvent *ev);
+    void resizeEvent(QResizeEvent *ev) override;
 
 protected:
     sodium::cell<QFont> m_font;
     sodium::cell_sink<QSize> m_size;
     Unsubscribe m_unsubscribe;
 };
+
+template<class Base>
+SQWidgetBase<Base>::SQWidgetBase()
+    : m_font(Base::font())
+    , m_size(QSize())
+{}
 
 template<class Base>
 SQWidgetBase<Base>::SQWidgetBase(QWidget *parent)

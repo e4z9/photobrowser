@@ -68,31 +68,6 @@ private:
 
 using Unsubscribe = std::unordered_map<std::string, UnsubscribeFunction>;
 
-template<typename T>
-class SQWidgetWrapper : public T
-{
-public:
-    SQWidgetWrapper();
-    SQWidgetWrapper(const sodium::cell<bool> &visible);
-
-private:
-    Unsubscribe m_unsubscribe;
-};
-
-template<typename T>
-SQWidgetWrapper<T>::SQWidgetWrapper()
-    : SQWidgetWrapper(true)
-{}
-
-template<typename T>
-SQWidgetWrapper<T>::SQWidgetWrapper(const sodium::cell<bool> &visible)
-{
-    m_unsubscribe.insert_or_assign("visible",
-                                   visible.listen(ensureSameThread<bool>(this, [this](bool v) {
-                                       T::setVisible(v);
-                                   })));
-}
-
 template<typename A>
 sodium::stream<A> calm(const sodium::stream<A> &s, const sodium::lazy<boost::optional<A>> &optInit)
 {
