@@ -8,7 +8,7 @@ SQLabel::SQLabel(QWidget *parent)
 {
 }
 
-void SQLabel::text(const sodium::cell<QString> &text)
+void SQLabel::setText(const sodium::cell<QString> &text)
 {
     m_text = text;
     m_unsubscribe.insert_or_assign("text",

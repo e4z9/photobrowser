@@ -11,7 +11,7 @@ class SQLabel : public SQWidgetBase<QLabel>
 public:
     explicit SQLabel(QWidget *parent = nullptr);
 
-    void text(const sodium::cell<QString> &text);
+    void setText(const sodium::cell<QString> &text);
     const sodium::cell<QString> &text() const;
 
 private:

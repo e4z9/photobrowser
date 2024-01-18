@@ -14,17 +14,18 @@ public:
     SQWidgetBase();
     explicit SQWidgetBase(QWidget *parent);
 
-    void visible(const sodium::cell<bool> &visible);
-    void enabled(const sodium::cell<bool> &enabled);
+    void setVisible(const sodium::cell<bool> &visible);
+    void setEnabled(const sodium::cell<bool> &enabled);
 
-    void font(const sodium::cell<QFont> &font);
+    void setFont(const sodium::cell<QFont> &font);
     const sodium::cell<QFont> &font() const { return m_font; }
 
-    // TODO a geometry getter would need to take the setter and the actual geometry into account
+    // TODO a setGeometry getter would need to take the setter and the actual setGeometry into account
     // so maybe this should take a stream instead
-    void geometry(const sodium::cell<QRect> &geometry);        // for setGeometry
+    void setGeometry(const sodium::cell<QRect> &geometry);
     const sodium::cell<QSize> &size() const { return m_size; } // actual size from resizeEvent
 
+protected:
     void resizeEvent(QResizeEvent *ev) override;
 
 protected:
@@ -49,35 +50,33 @@ SQWidgetBase<Base>::SQWidgetBase(QWidget *parent)
 {}
 
 template<class Base>
-void SQWidgetBase<Base>::visible(const sodium::cell<bool> &visible)
+void SQWidgetBase<Base>::setVisible(const sodium::cell<bool> &visible)
 {
     m_unsubscribe.insert_or_assign("visible",
-                                   visible.listen(
-                                       ensureSameThread<bool>(this, &QWidget::setVisible)));
+                                   visible.listen(ensureSameThread<bool>(this, &Base::setVisible)));
 }
 
 template<class Base>
-void SQWidgetBase<Base>::enabled(const sodium::cell<bool> &enabled)
+void SQWidgetBase<Base>::setEnabled(const sodium::cell<bool> &enabled)
 {
     m_unsubscribe.insert_or_assign("enabled",
-                                   enabled.listen(
-                                       ensureSameThread<bool>(this, &QWidget::setEnabled)));
+                                   enabled.listen(ensureSameThread<bool>(this, &Base::setEnabled)));
 }
 
 template<class Base>
-void SQWidgetBase<Base>::font(const sodium::cell<QFont> &font)
+void SQWidgetBase<Base>::setFont(const sodium::cell<QFont> &font)
 {
     m_font = font;
     m_unsubscribe.insert_or_assign("font",
-                                   font.listen(ensureSameThread<QFont>(this, &QWidget::setFont)));
+                                   font.listen(ensureSameThread<QFont>(this, &Base::setFont)));
 }
 
 template<class Base>
-void SQWidgetBase<Base>::geometry(const sodium::cell<QRect> &geometry)
+void SQWidgetBase<Base>::setGeometry(const sodium::cell<QRect> &geometry)
 {
     m_unsubscribe.insert_or_assign("geometry",
                                    geometry.listen(
-                                       ensureSameThread<QRect>(this, &QWidget::setGeometry)));
+                                       ensureSameThread<QRect>(this, &Base::setGeometry)));
 }
 
 template<class Base>

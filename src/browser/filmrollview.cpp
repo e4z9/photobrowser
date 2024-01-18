@@ -278,14 +278,14 @@ Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
     QPalette pal = m_dateLabel->palette();
     pal.setBrush(QPalette::Window, pal.brush(QPalette::Base));
     m_dateLabel->setPalette(pal);
-    m_dateLabel->text(m_frontDate);
-    m_dateLabel->font(m_frontDateFont);
+    m_dateLabel->setText(m_frontDate);
+    m_dateLabel->setFont(m_frontDateFont);
     const auto textSize
         = m_dateLabel->text().lift(m_dateLabel->font(), [](const QString &text, const QFont &font) {
               const QFontMetrics fm(font);
               return QSize(MARGIN + fm.horizontalAdvance(text), fm.height());
           });
-    m_dateLabel->geometry(size().lift(textSize, [this](const QSize &rollSize, const QSize &textSize) {
+    m_dateLabel->setGeometry(size().lift(textSize, [this](const QSize &rollSize, const QSize &textSize) {
         return QRect(1, rollSize.height() - textSize.height(), textSize.width(), textSize.height());
     }));
 }
@@ -293,7 +293,7 @@ Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
 void Fotoroll::setMediaModel(MediaDirectoryModel *model)
 {
     setModel(model);
-    m_dateLabel->visible(model->showDateDisplay());
+    m_dateLabel->setVisible(model->showDateDisplay());
 }
 
 bool Fotoroll::event(QEvent *ev)

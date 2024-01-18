@@ -287,12 +287,12 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     filterInput->setClearButtonEnabled(true);
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
     auto recursiveCheckBox = new SQCheckBox;
-    recursiveCheckBox->text(recursiveText);
-    recursiveCheckBox->checked(sIsRecursive);
+    recursiveCheckBox->setText(recursiveText);
+    recursiveCheckBox->setChecked(sIsRecursive);
     stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
     auto videosOnlyCheckbox = new SQCheckBox;
-    videosOnlyCheckbox->text(videosOnlyText);
-    videosOnlyCheckbox->checked(sVideosOnly);
+    videosOnlyCheckbox->setText(videosOnlyText);
+    videosOnlyCheckbox->setChecked(sVideosOnly);
 
     const auto cIsRecursive = recursiveCheckBox->cChecked().map(&IsRecursive::fromBool);
     const auto cFilter = videosOnlyCheckbox->cChecked()
@@ -346,10 +346,10 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     m_progressTimer->setInterval(50);
     m_progressTimer->setSingleShot(true);
     m_progressIndicator = new SProgressIndicator;
-    m_progressIndicator->visible(m_progressTimer->sTimeout()
-                                     .map_to(true)
-                                     .or_else(m_model->sLoadingFinished().map_to(false))
-                                     .hold(false));
+    m_progressIndicator->setVisible(m_progressTimer->sTimeout()
+                                        .map_to(true)
+                                        .or_else(m_model->sLoadingFinished().map_to(false))
+                                        .hold(false));
     m_progressIndicator->setParent(leftWidget);
     adaptProgressIndicator();
 

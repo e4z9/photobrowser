@@ -326,7 +326,7 @@ protected:
 
 PlayIcon::PlayIcon(const cell<bool> &v)
 {
-    visible(v);
+    setVisible(v);
 }
 
 void PlayIcon::paintEvent(QPaintEvent *)
