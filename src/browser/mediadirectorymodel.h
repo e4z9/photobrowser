@@ -66,7 +66,7 @@ public:
     const sodium::stream<sodium::unit> &sLoadingStarted() const;
     const sodium::stream<sodium::unit> &sLoadingFinished() const;
 
-    bool isShowingDateDisplay() const;
+    const sodium::cell<bool> &showDateDisplay() const;
 
     void moveItemAtIndexToTrash(int index);
 
@@ -92,6 +92,7 @@ private:
     sodium::cell<IsRecursive> m_isRecursive;
     sodium::cell<Filter> m_filter;
     sodium::cell<SortKey> m_sortKey;
+    sodium::cell<bool> m_showDateDisplay;
     sodium::stream_sink<sodium::unit> m_sLoadingStarted;
     sodium::stream_sink<sodium::unit> m_sLoadingFinished;
     Unsubscribe m_unsubscribe;

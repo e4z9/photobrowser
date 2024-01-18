@@ -2,10 +2,12 @@
 
 #include "fullscreensplitter.h"
 #include "imageview.h"
+#include "sqlabel.h"
 #include "sqlistview.h"
 
 #include <QAbstractItemDelegate>
 #include <QEvent>
+#include <QFont>
 #include <QPainter>
 #include <QScrollBar>
 #include <QSplitter>
@@ -18,6 +20,7 @@ class Fotoroll : public SQListView
 public:
     Fotoroll(const stream<boost::optional<int>> &sCurrentIndex);
 
+    void setMediaModel(MediaDirectoryModel *model);
     bool event(QEvent *ev) override;
 
     const cell<OptionalMediaItem> &currentItem() const;
@@ -27,7 +30,10 @@ protected:
 
 private:
     cell<OptionalMediaItem> m_currentItem;
+    sodium::cell_sink<QString> m_frontDate; // date of the first visible item
+    sodium::cell<QFont> m_frontDateFont;
     MediaItemDelegate m_delegate;
+    SQLabel *m_dateLabel = nullptr;
 };
 
 static constexpr int MARGIN = 10;
@@ -62,14 +68,14 @@ FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
     layout()->addWidget(m_splitter);
 }
 
-void FilmRollView::setModel(QAbstractItemModel *model)
+void FilmRollView::setModel(MediaDirectoryModel *model)
 {
-    m_fotoroll->setModel(model);
+    m_fotoroll->setMediaModel(model);
 }
 
-QAbstractItemModel *FilmRollView::model() const
+MediaDirectoryModel *FilmRollView::model() const
 {
-    return m_fotoroll->model();
+    return static_cast<MediaDirectoryModel *>(m_fotoroll->model());
 }
 
 const sodium::cell<boost::optional<int>> &FilmRollView::currentIndex() const
@@ -245,6 +251,8 @@ QSize MediaItemDelegate::sizeHint(const QStyleOptionViewItem &option, const QMod
 Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
     : SQListView(sCurrentIndex)
     , m_currentItem(std::nullopt)
+    , m_frontDate(QString())
+    , m_frontDateFont(QFont())
 {
     setFlow(QListView::LeftToRight);
     setItemDelegate(&m_delegate);
@@ -258,6 +266,34 @@ Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
         }
         return {};
     });
+
+    m_frontDateFont = font().lift(size(), [](const QFont &f, const QSize &s) {
+        return scaledFont(f, s.height());
+    });
+
+    m_dateLabel = new SQLabel(this);
+    m_dateLabel->setVisible(false);
+    m_dateLabel->setAlignment(Qt::AlignCenter);
+    m_dateLabel->setAutoFillBackground(true);
+    QPalette pal = m_dateLabel->palette();
+    pal.setBrush(QPalette::Window, pal.brush(QPalette::Base));
+    m_dateLabel->setPalette(pal);
+    m_dateLabel->text(m_frontDate);
+    m_dateLabel->font(m_frontDateFont);
+    const auto textSize
+        = m_dateLabel->text().lift(m_dateLabel->font(), [](const QString &text, const QFont &font) {
+              const QFontMetrics fm(font);
+              return QSize(MARGIN + fm.horizontalAdvance(text), fm.height());
+          });
+    m_dateLabel->geometry(size().lift(textSize, [this](const QSize &rollSize, const QSize &textSize) {
+        return QRect(1, rollSize.height() - textSize.height(), textSize.width(), textSize.height());
+    }));
+}
+
+void Fotoroll::setMediaModel(MediaDirectoryModel *model)
+{
+    setModel(model);
+    m_dateLabel->visible(model->showDateDisplay());
 }
 
 bool Fotoroll::event(QEvent *ev)
@@ -281,8 +317,9 @@ const cell<OptionalMediaItem> &Fotoroll::currentItem() const
 
 void Fotoroll::paintEvent(QPaintEvent *pe)
 {
+    static int count = 0;
     SQListView::paintEvent(pe);
-    if (!static_cast<MediaDirectoryModel *>(model())->isShowingDateDisplay())
+    if (!static_cast<MediaDirectoryModel *>(model())->showDateDisplay().sample())
         return;
     // paint date of first visible item
     const auto index = indexAt({0, 0});
@@ -291,17 +328,5 @@ void Fotoroll::paintEvent(QPaintEvent *pe)
         return;
     const auto item = value.value<MediaItem>();
     const auto date = item.createdDateTime();
-    const auto dateString = date.toString("d. MMMM yyyy");
-    QPainter p(viewport());
-    const QFont dateFont = scaledFont(font(), rect().height());
-    p.setFont(dateFont);
-    const QFontMetrics fm(dateFont);
-    p.fillRect(QRect(viewport()->rect().x(),
-                     viewport()->rect().bottom() - fm.height(),
-                     MARGIN + fm.horizontalAdvance(dateString),
-                     fm.height()),
-               palette().brush(QPalette::Base));
-    p.drawText(QPoint(viewport()->rect().x() + MARGIN,
-                      viewport()->rect().bottom() - QFontMetrics(dateFont).descent()),
-               dateString);
+    m_frontDate.send(date.toString("d. MMMM yyyy"));
 }

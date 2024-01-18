@@ -1,12 +1,12 @@
 #pragma once
 
-#include "sqtools.h"
+#include "sqwidgetbase.h"
 
 #include <QListView>
 
 #include <sodium/sodium.h>
 
-class SQListView : public QListView
+class SQListView : public SQWidgetBase<QListView>
 {
 public:
     SQListView(const sodium::stream<boost::optional<int>> &sCurrentIndex);
@@ -26,6 +26,5 @@ private:
     sodium::cell<boost::optional<int>> m_currentIndex;
     sodium::stream_sink<boost::optional<int>> m_sUserCurrentIndex;
     sodium::cell_sink<int> m_count;
-    Unsubscribe m_unsubscribe;
     bool blockChange = false;
 };

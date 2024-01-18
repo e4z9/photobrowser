@@ -115,6 +115,7 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
     , m_isRecursive(isRecursive)
     , m_filter(filter)
     , m_sortKey(sortKey)
+    , m_showDateDisplay(m_sortKey.map([](SortKey key) { return key == SortKey::ExifCreation; }))
 {
     connect(&m_thumbnailCreator,
             &ThumbnailCreator::thumbnailReady,
@@ -353,9 +354,9 @@ void MediaDirectoryModel::setSortKey(SortKey key)
     endResetModel();
 }
 
-bool MediaDirectoryModel::isShowingDateDisplay() const
+const sodium::cell<bool> &MediaDirectoryModel::showDateDisplay() const
 {
-    return m_sortKey.sample() == SortKey::ExifCreation;
+    return m_showDateDisplay;
 }
 
 QModelIndex MediaDirectoryModel::index(int row, int column, const QModelIndex &parent) const
@@ -450,9 +451,9 @@ QVariant MediaDirectoryModel::data(const QModelIndex &index, int role) const
         return {};
     }
     if (role == int(Role::ShowDateDisplay))
-        return isShowingDateDisplay();
+        return showDateDisplay().sample();
     if (role == int(Role::DateDisplay)) {
-        if (isShowingDateDisplay()
+        if (showDateDisplay().sample()
             && (!previousItem
                 || previousItem->createdDateTime().date() != item.createdDateTime().date())) {
             return item.createdDateTime().toString("d.M.");

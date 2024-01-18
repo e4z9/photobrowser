@@ -45,8 +45,8 @@ public:
                  const sodium::stream<bool> &sFullscreen,
                  const sodium::stream<std::optional<qreal>> &sScale);
 
-    void setModel(QAbstractItemModel *model);
-    QAbstractItemModel *model() const;
+    void setModel(MediaDirectoryModel *model);
+    MediaDirectoryModel *model() const;
 
     const sodium::cell<boost::optional<int>> &currentIndex() const;
     const sodium::cell<OptionalMediaItem> &currentItem() const;

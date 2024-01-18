@@ -6,6 +6,8 @@ add_library(sodium-qt STATIC
     sqcheckbox.cpp
     sqcheckbox.h
     sqeditbase.h
+    sqlabel.cpp
+    sqlabel.h
     sqlineedit.cpp
     sqlineedit.h
     sqlistview.cpp
@@ -14,6 +16,7 @@ add_library(sodium-qt STATIC
     sqtimer.h
     sqtools.cpp
     sqtools.h
+    sqwidgetbase.h
 )
 
 target_include_directories(sodium-qt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
