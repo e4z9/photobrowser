@@ -119,8 +119,8 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
             gst_element_set_state(e, GST_STATE_NULL);
     });
     init();
-    m_unsubscribe += uri.listen(
-        post<std::optional<QUrl>>(this, [this](const std::optional<QUrl> &uri) {
+    m_unsubscribe.insert_or_assign(
+        "uri", uri.listen(post<std::optional<QUrl>>(this, [this](const std::optional<QUrl> &uri) {
             transaction t;
             init();
             state.send(GST_STATE_NULL);
@@ -133,23 +133,25 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                              nullptr);
             if (pipeline() && uri)
                 gst_element_set_state(pipeline(), GST_STATE_PAUSED);
-        }));
-    m_unsubscribe += sStepVideo.listen(post<qint64>(this, [this](qint64 step) {
-        if (!pipeline())
-            return;
-        gint64 position;
-        if (gst_element_query_position(pipeline(), GST_FORMAT_TIME, &position)) {
-            const GstSeekFlags snapOption = step < 0 ? GST_SEEK_FLAG_SNAP_BEFORE
-                                                     : GST_SEEK_FLAG_SNAP_AFTER;
-            gst_element_seek_simple(pipeline(),
-                                    GST_FORMAT_TIME,
-                                    GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT
-                                                 | snapOption),
-                                    std::max(0ll, position + GST_MSECOND * step));
-        }
-    }));
-    m_unsubscribe += sTogglePlayVideo.snapshot(state).listen(
-        post<GstState>(this, [this](GstState state) {
+        })));
+    m_unsubscribe
+        .insert_or_assign("stepvideo", sStepVideo.listen(post<qint64>(this, [this](qint64 step) {
+            if (!pipeline())
+                return;
+            gint64 position;
+            if (gst_element_query_position(pipeline(), GST_FORMAT_TIME, &position)) {
+                const GstSeekFlags snapOption = step < 0 ? GST_SEEK_FLAG_SNAP_BEFORE
+                                                         : GST_SEEK_FLAG_SNAP_AFTER;
+                gst_element_seek_simple(pipeline(),
+                                        GST_FORMAT_TIME,
+                                        GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT
+                                                     | snapOption),
+                                        std::max(0ll, position + GST_MSECOND * step));
+            }
+        })));
+    m_unsubscribe.insert_or_assign(
+        "toggleplayvideo",
+        sTogglePlayVideo.snapshot(state).listen(post<GstState>(this, [this](GstState state) {
             if (pipeline()) {
                 if (state == STATE_EOS) {
                     gst_element_seek_simple(pipeline(),
@@ -163,7 +165,7 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                                           ? GST_STATE_PLAYING
                                           : GST_STATE_PAUSED);
             }
-        }));
+        })));
 }
 
 const cell<std::optional<QImage>> VideoPlayer::frame() const
@@ -285,16 +287,19 @@ private:
 VideoGraphicsItem::VideoGraphicsItem(const cell<std::optional<QImage>> &image)
     : image(image)
 {
-    m_unsubscribe += this->image.listen(
-        ensureSameThread<std::optional<QImage>>(qApp, [this](const auto &i) {
-            if ((i && QRectF(i->rect()) != currentRect) || (!i && !currentRect.isNull())) {
-                prepareGeometryChange();
-                currentRect = i ? QRectF(i->rect()) : QRectF();
-                if (rectCallback)
-                    rectCallback(currentRect);
-            }
-            update();
-        }));
+    m_unsubscribe
+        .insert_or_assign("image",
+                          this->image.listen(
+                              ensureSameThread<std::optional<QImage>>(qApp, [this](const auto &i) {
+                                  if ((i && QRectF(i->rect()) != currentRect)
+                                      || (!i && !currentRect.isNull())) {
+                                      prepareGeometryChange();
+                                      currentRect = i ? QRectF(i->rect()) : QRectF();
+                                      if (rectCallback)
+                                          rectCallback(currentRect);
+                                  }
+                                  update();
+                              })));
 }
 
 QRectF VideoGraphicsItem::boundingRect() const
@@ -364,12 +369,13 @@ TimeDisplay::TimeDisplay(const cell<std::optional<qint64>> &position,
               updateGeometry();
               update();
           });
-    m_unsubscribe += position
-                         .lift(duration,
-                               [](const time_type &p, const time_type &d) {
-                                   return time_pair_type(p, d);
-                               })
-                         .listen(updateDisplay);
+    m_unsubscribe.insert_or_assign("position",
+                                   position
+                                       .lift(duration,
+                                             [](const time_type &p, const time_type &d) {
+                                                 return time_pair_type(p, d);
+                                             })
+                                       .listen(updateDisplay));
 }
 
 QSize TimeDisplay::sizeHint() const
@@ -396,12 +402,12 @@ private:
 ScreenSleepBlocker::ScreenSleepBlocker(const cell<bool> &block)
     : m_blocker(ImageView::tr("playing video"))
 {
-    m_unsubscribe += calm(block).listen([this](bool block) {
+    m_unsubscribe.insert_or_assign("block", calm(block).listen([this](bool block) {
         if (block)
             m_blocker.block();
         else
             m_blocker.unblock();
-    });
+    }));
 }
 
 class VideoViewer : public QGraphicsView
@@ -448,14 +454,18 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
     };
     scene()->addItem(m_item);
 
-    m_unsubscribe += sFullscreen.map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
-                         .listen(ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape));
-    m_unsubscribe += sScale.listen([this](const std::optional<qreal> &s) {
+    m_unsubscribe
+        .insert_or_assign("fullscreen",
+                          sFullscreen
+                              .map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
+                              .listen(
+                                  ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape)));
+    m_unsubscribe.insert_or_assign("scale", sScale.listen([this](const std::optional<qreal> &s) {
         if (s)
             scale(*s, *s);
         else
             fitInView(m_item, Qt::KeepAspectRatio);
-    });
+    }));
 
     auto layout = new QVBoxLayout;
     setLayout(layout);
@@ -495,23 +505,28 @@ PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image,
     setRenderHint(QPainter::Antialiasing);
     setFocusPolicy(Qt::NoFocus);
 
-    m_unsubscribe += image.listen(
-        ensureSameThread<OptionalMediaItem>(this, [this](const OptionalMediaItem &i) {
+    m_unsubscribe.insert_or_assign(
+        "image",
+        image.listen(ensureSameThread<OptionalMediaItem>(this, [this](const OptionalMediaItem &i) {
             if (i)
                 setItem(*i);
             else
                 clear();
-        }));
-    m_unsubscribe += sFullscreen.map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
-                         .listen(ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape));
-    m_unsubscribe += sScale.listen([this](const std::optional<qreal> &s) {
+        })));
+    m_unsubscribe
+        .insert_or_assign("fullscreen",
+                          sFullscreen
+                              .map([](bool b) { return b ? QFrame::NoFrame : QFrame::Panel; })
+                              .listen(
+                                  ensureSameThread<QFrame::Shape>(this, &QFrame::setFrameShape)));
+    m_unsubscribe.insert_or_assign("scale", sScale.listen([this](const std::optional<qreal> &s) {
         if (!m_item)
             return;
         if (s)
             scale(*s, *s);
         else
             fitInView(m_item, Qt::KeepAspectRatio);
-    });
+    }));
 }
 
 void PictureViewer::clear()
@@ -587,14 +602,20 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
                             return img ? pictureViewer : vid ? videoViewer : noViewer;
                         });
 
-    m_unsubscribe += viewerWidget.listen(
-        ensureSameThread<QWidget *>(m_layout, &QStackedLayout::setCurrentWidget));
-    m_unsubscribe += sFullscreen.listen(ensureSameThread<bool>(this, [this](bool b) {
-        auto p = palette();
-        p.setColor(QPalette::Base, b ? Qt::black : QGuiApplication::palette().color(QPalette::Base));
-        p.setColor(QPalette::Text, b ? Qt::white : QGuiApplication::palette().color(QPalette::Text));
-        setPalette(p);
-    }));
+    m_unsubscribe
+        .insert_or_assign("viewerwidget",
+                          viewerWidget.listen(
+                              ensureSameThread<QWidget *>(m_layout,
+                                                          &QStackedLayout::setCurrentWidget)));
+    m_unsubscribe.insert_or_assign(
+        "fullscreen", sFullscreen.listen(ensureSameThread<bool>(this, [this](bool b) {
+            auto p = palette();
+            p.setColor(QPalette::Base,
+                       b ? Qt::black : QGuiApplication::palette().color(QPalette::Base));
+            p.setColor(QPalette::Text,
+                       b ? Qt::white : QGuiApplication::palette().color(QPalette::Text));
+            setPalette(p);
+        })));
 
     m_layout->setContentsMargins(0, 0, 0, 0);
     setLayout(m_layout);

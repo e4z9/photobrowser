@@ -41,27 +41,25 @@ SQWidgetBase<Base>::SQWidgetBase(QWidget *parent)
 template<class Base>
 void SQWidgetBase<Base>::visible(const sodium::cell<bool> &visible)
 {
-    // TODO
-    // This could lead to issues if `visible` is called multiple times.
-    // A way around that could be a another simple unsubscribe helper,
-    // that is a std::unique_ptr holding an unsubscribe function, and
-    // that calls that unsubscribe on destruction.
-    // and possibly replace the current Unsubscribe by a unordered_map<string, SingleUnsubscribe>.
-    // And then get rid of the multitude of huge constructors.
-    m_unsubscribe += visible.listen(ensureSameThread<bool>(this, &QWidget::setVisible));
+    m_unsubscribe.insert_or_assign("visible",
+                                   visible.listen(
+                                       ensureSameThread<bool>(this, &QWidget::setVisible)));
 }
 
 template<class Base>
 void SQWidgetBase<Base>::font(const sodium::cell<QFont> &font)
 {
     m_font = font;
-    m_unsubscribe += font.listen(ensureSameThread<QFont>(this, &QWidget::setFont));
+    m_unsubscribe.insert_or_assign("font",
+                                   font.listen(ensureSameThread<QFont>(this, &QWidget::setFont)));
 }
 
 template<class Base>
 void SQWidgetBase<Base>::geometry(const sodium::cell<QRect> &geometry)
 {
-    m_unsubscribe += geometry.listen(ensureSameThread<QRect>(this, &QWidget::setGeometry));
+    m_unsubscribe.insert_or_assign("geometry",
+                                   geometry.listen(
+                                       ensureSameThread<QRect>(this, &QWidget::setGeometry)));
 }
 
 template<class Base>

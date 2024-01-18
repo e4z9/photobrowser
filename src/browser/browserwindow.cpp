@@ -81,7 +81,8 @@ QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
                                        fileMenu);
     revealInFinder->setShortcut({"o"});
     const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->sTriggered());
-    m_unsubscribe += sReveal.listen(post<QString>(this, &Util::revealInFinder));
+    m_unsubscribe.insert_or_assign("reveil",
+                                   sReveal.listen(post<QString>(this, &Util::revealInFinder)));
 
     auto openInDefaultEditor = new SQAction(BrowserWindow::tr("Open in Default Editor"),
                                             anyItemSelected,
@@ -89,7 +90,8 @@ QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
     openInDefaultEditor->setShortcut({"ctrl+o"});
     const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered())
                                          .map(&QUrl::fromLocalFile);
-    m_unsubscribe += sOpenEditor.listen(post<QUrl>(this, &QDesktopServices::openUrl));
+    m_unsubscribe.insert_or_assign("openeditor",
+                                   sOpenEditor.listen(post<QUrl>(this, &QDesktopServices::openUrl)));
 
     auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
@@ -97,8 +99,10 @@ QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
                                          .snapshot(currentIndex)
                                          .filter(&boost::optional<int>::operator bool)
                                          .map([](const boost::optional<int> &i) { return *i; });
-    m_unsubscribe += sMoveToTrash.listen(
-        post<int>(m_model.get(), &MediaDirectoryModel::moveItemAtIndexToTrash));
+    m_unsubscribe.insert_or_assign("movetotrash",
+                                   sMoveToTrash.listen(
+                                       post<int>(m_model.get(),
+                                                 &MediaDirectoryModel::moveItemAtIndexToTrash)));
 
     fileMenu->addAction(revealInFinder);
     fileMenu->addAction(openInDefaultEditor);
@@ -351,7 +355,9 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     // window title
     const cell<QString> title = imageView->currentItem().map(
         [](const OptionalMediaItem &i) { return i ? i->windowTitle() : QString(); });
-    m_unsubscribe += title.listen(ensureSameThread<QString>(this, &QWidget::setWindowTitle));
+    m_unsubscribe.insert_or_assign("title",
+                                   title.listen(
+                                       ensureSameThread<QString>(this, &QWidget::setWindowTitle)));
 
     // file actions
     menubar->addMenu(createFileMenu(imageView->currentItem(), imageView->currentIndex()));
@@ -383,10 +389,12 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     auto filter = new SQAction(tr("Search"), viewMenu);
     filter->setShortcut({"Ctrl+F"});
-    m_unsubscribe += filter->sTriggered().listen(post<unit>(filterInput, [filterInput](unit) {
-        filterInput->setFocus(Qt::OtherFocusReason);
-        filterInput->selectAll();
-    }));
+    m_unsubscribe.insert_or_assign("filtertriggered",
+                                   filter->sTriggered().listen(
+                                       post<unit>(filterInput, [filterInput](unit) {
+                                           filterInput->setFocus(Qt::OtherFocusReason);
+                                           filterInput->selectAll();
+                                       })));
     viewMenu->addAction(filter);
 
     viewMenu->addSeparator();
@@ -407,13 +415,17 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     toggleFullscreen->setMenuRole(QAction::NoRole);
     toggleFullscreen->setShortcut({"Meta+Ctrl+F"});
     // event filter will send new value to m_sFullscreen, so do post
-    m_unsubscribe += toggleFullscreen->sTriggered().listen(post<unit>(this, [this](unit) {
-        if (window()->isFullScreen()) {
-            window()->setWindowState(m_previousWindowState & ~Qt::WindowFullScreen);
-        } else {
-            window()->setWindowState(window()->windowState() | Qt::WindowFullScreen);
-        }
-    }));
+    m_unsubscribe.insert_or_assign("togglefullscreentriggered",
+                                   toggleFullscreen->sTriggered().listen(
+                                       post<unit>(this, [this](unit) {
+                                           if (window()->isFullScreen()) {
+                                               window()->setWindowState(m_previousWindowState
+                                                                        & ~Qt::WindowFullScreen);
+                                           } else {
+                                               window()->setWindowState(window()->windowState()
+                                                                        | Qt::WindowFullScreen);
+                                           }
+                                       })));
 
     viewMenu->addAction(toggleFullscreen);
 

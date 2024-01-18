@@ -139,16 +139,20 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
             insertItems(value.first, value.second);
     });
 
-    m_unsubscribe += m_path.listen(post<QString>(this, [this](QString) {
+    m_unsubscribe.insert_or_assign("path", m_path.listen(post<QString>(this, [this](QString) {
         load(); /*trigger reload*/
-    }));
-    m_unsubscribe += m_isRecursive.listen(post<IsRecursive>(this, [this](IsRecursive) {
+    })));
+    m_unsubscribe.insert_or_assign("recursive",
+                                   m_isRecursive.listen(post<IsRecursive>(this, [this](IsRecursive) {
+                                       load(); /*trigger reload*/
+                                   })));
+    m_unsubscribe.insert_or_assign("filter", m_filter.listen(post<Filter>(this, [this](Filter) {
         load(); /*trigger reload*/
-    }));
-    m_unsubscribe += m_filter.listen(post<Filter>(this, [this](Filter) {
-        load(); /*trigger reload*/
-    }));
-    m_unsubscribe += m_sortKey.listen(post<SortKey>(this, [this](SortKey key) { setSortKey(key); }));
+    })));
+    m_unsubscribe.insert_or_assign("sortkey",
+                                   m_sortKey.listen(post<SortKey>(this, [this](SortKey key) {
+                                       setSortKey(key);
+                                   })));
 }
 
 MediaDirectoryModel::~MediaDirectoryModel()

@@ -10,20 +10,22 @@ SQListView::SQListView(const sodium::stream<boost::optional<int>> &sCurrentIndex
         [this](const auto &optIndex) {
             return !optIndex || (*optIndex < m_count.sample() && *optIndex >= 0);
         });
-    m_unsubscribe += sBoundedCurrentIndex.listen(
-        ensureSameThread<boost::optional<int>>(this, [this](boost::optional<int> i) {
-            if (!model())
-                return;
-            blockChange = true;
-            if (i) {
-                const QModelIndex index = model()->index(*i, 0);
-                setCurrentIndex(index);
-                scrollTo(index);
-            } else {
-                setCurrentIndex(QModelIndex());
-            }
-            blockChange = false;
-        }));
+    m_unsubscribe.insert_or_assign(
+        "currentIndex",
+        sBoundedCurrentIndex.listen(
+            ensureSameThread<boost::optional<int>>(this, [this](boost::optional<int> i) {
+                if (!model())
+                    return;
+                blockChange = true;
+                if (i) {
+                    const QModelIndex index = model()->index(*i, 0);
+                    setCurrentIndex(index);
+                    scrollTo(index);
+                } else {
+                    setCurrentIndex(QModelIndex());
+                }
+                blockChange = false;
+            })));
     m_currentIndex = sBoundedCurrentIndex.or_else(m_sUserCurrentIndex).hold(boost::none);
 }
 

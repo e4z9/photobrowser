@@ -6,7 +6,6 @@
 #include <sodium/sodium.h>
 
 #include <functional>
-#include <vector>
 
 template<typename A>
 std::function<void(A)> ensureSameThread(QObject *guard, const std::function<void(A)> &action)
@@ -51,15 +50,23 @@ std::function<void(A)> post(B *guard, void (C::*f)(const A &))
     return post<A>(guard, std::bind(f, guard, std::placeholders::_1));
 }
 
-class Unsubscribe
+class UnsubscribeFunction
 {
 public:
-    Unsubscribe &operator+=(const std::function<void()> &&unsub);
-    ~Unsubscribe();
+    UnsubscribeFunction(const std::function<void()> &&unsub);
+    ~UnsubscribeFunction();
+
+    UnsubscribeFunction(UnsubscribeFunction &&other);
+    UnsubscribeFunction &operator=(UnsubscribeFunction &&other);
+
+    UnsubscribeFunction(const UnsubscribeFunction &) = delete;
+    UnsubscribeFunction &operator=(UnsubscribeFunction &) = delete;
 
 private:
-    std::vector<std::function<void()>> m_unsubs;
+    std::function<void()> m_unsub;
 };
+
+using Unsubscribe = std::unordered_map<std::string, UnsubscribeFunction>;
 
 template<typename T>
 class SQWidgetWrapper : public T
@@ -80,8 +87,10 @@ SQWidgetWrapper<T>::SQWidgetWrapper()
 template<typename T>
 SQWidgetWrapper<T>::SQWidgetWrapper(const sodium::cell<bool> &visible)
 {
-    m_unsubscribe += visible.listen(
-        ensureSameThread<bool>(this, [this](bool v) { T::setVisible(v); }));
+    m_unsubscribe.insert_or_assign("visible",
+                                   visible.listen(ensureSameThread<bool>(this, [this](bool v) {
+                                       T::setVisible(v);
+                                   })));
 }
 
 template<typename A>

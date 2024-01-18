@@ -20,8 +20,10 @@ FullscreenSplitter::FullscreenSplitter(const sodium::stream<bool> &sFullscreen)
     addWidget(m_splitter);
     addWidget(m_fullscreen);
 
-    m_unsubscribe += sFullscreen.listen(
-        ensureSameThread<bool>(this, &FullscreenSplitter::setFullscreen));
+    m_unsubscribe.insert_or_assign("fullscreen",
+                                   sFullscreen.listen(
+                                       ensureSameThread<bool>(this,
+                                                              &FullscreenSplitter::setFullscreen)));
 }
 
 void FullscreenSplitter::setOrientation(Qt::Orientation orientation)

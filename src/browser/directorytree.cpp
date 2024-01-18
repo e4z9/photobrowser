@@ -93,8 +93,11 @@ DirectoryTree::DirectoryTree(const stream<QString> &sRootPath, sodium::stream<QS
                 sRootPathFromUI.send(m_dirSelector->itemData(index).toString());
             });
     m_rootPath.loop(sRootPathFromUI.or_else(sRootPath).or_else(sRootPathUp).hold(defaultRootPath()));
-    m_unsubscribe += m_rootPath.listen(
-        ensureSameThread<QString>(this, [this](const QString &p) { setRootPath(p); }));
+    m_unsubscribe.insert_or_assign("rootpath",
+                                   m_rootPath.listen(
+                                       ensureSameThread<QString>(this, [this](const QString &p) {
+                                           setRootPath(p);
+                                       })));
 
     stream_sink<QString> sPathFromTree;
     connect(m_dirTree->selectionModel(),
@@ -104,9 +107,11 @@ DirectoryTree::DirectoryTree(const stream<QString> &sRootPath, sodium::stream<QS
                 sPathFromTree.send(path(m_dirTree->currentIndex()));
             }));
     m_path = sPathFromTree.or_else(sPath).hold(QString());
-    m_unsubscribe += m_path.listen(ensureSameThread<QString>(this, [this](const QString &p) {
-        m_dirTree->setCurrentIndex(m_dirModel->index(p));
-    }));
+    m_unsubscribe.insert_or_assign("path",
+                                   m_path.listen(
+                                       ensureSameThread<QString>(this, [this](const QString &p) {
+                                           m_dirTree->setCurrentIndex(m_dirModel->index(p));
+                                       })));
 }
 
 const sodium::cell<QString> &DirectoryTree::rootPath() const
