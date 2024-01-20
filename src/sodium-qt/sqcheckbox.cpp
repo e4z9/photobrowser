@@ -3,9 +3,15 @@
 using namespace sodium;
 
 SQCheckBox::SQCheckBox(QWidget *parent)
+    : SQCheckBox(QString(), parent)
+{}
+
+SQCheckBox::SQCheckBox(const sodium::cell<QString> &text, QWidget *parent)
     : SQWidgetBase<QCheckBox>(parent)
     , m_isChecked(false)
-{}
+{
+    setText(text);
+}
 
 void SQCheckBox::setText(const sodium::cell<QString> &text)
 {
