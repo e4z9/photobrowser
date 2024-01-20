@@ -8,8 +8,9 @@ SQCheckBox::SQCheckBox(QWidget *parent)
 
 SQCheckBox::SQCheckBox(const sodium::cell<QString> &text, QWidget *parent)
     : SQWidgetBase<QCheckBox>(parent)
-    , m_isChecked(false)
+    , m_isChecked(false, this, [this](bool v) { QCheckBox::setChecked(v); })
 {
+    connect(this, &QCheckBox::toggled, this, [this](bool c) { m_isChecked.setUserValue(c); });
     setText(text);
 }
 
@@ -20,24 +21,17 @@ void SQCheckBox::setText(const sodium::cell<QString> &text)
                                        ensureSameThread<QString>(this, &QCheckBox::setText)));
 }
 
-void SQCheckBox::setChecked(const sodium::stream<bool> &sChecked)
+void SQCheckBox::setChecked(const sodium::stream<bool> &sChecked, bool initialValue)
 {
-    stream_sink<bool> sUserChecked;
-    connect(this, &QCheckBox::toggled, this, [sUserChecked](bool c) { sUserChecked.send(c); });
-    m_isChecked = calm(sUserChecked.or_else(sChecked).hold(false));
-    // use m_isChecked.sample in the potentially async listener,
-    // in case a user change is posted in between
-    m_unsubscribe.insert_or_assign("checked", m_isChecked.listen(post<bool>(this, [this](bool) {
-        QCheckBox::setChecked(m_isChecked.sample());
-    })));
+    m_isChecked.setValue(sChecked, initialValue);
 }
 
 const stream<bool> SQCheckBox::sChecked() const
 {
-    return m_isChecked.updates();
+    return m_isChecked.value().updates();
 }
 
 const sodium::cell<bool> &SQCheckBox::cChecked() const
 {
-    return m_isChecked;
+    return m_isChecked.value();
 }

@@ -24,6 +24,6 @@ public:
 
 private:
     sodium::stream_sink<sodium::unit> m_sTriggered;
-    sodium::cell<bool> m_isChecked;
+    UserValue<bool> m_isChecked;
     Unsubscribe m_unsubscribe;
 };

@@ -95,6 +95,57 @@ sodium::cell<A> calm(const sodium::cell<A> &a)
     return calm(a.updates(), optInit).hold_lazy(init);
 }
 
+template<typename Value>
+class UserValue
+{
+public:
+    UserValue(const Value &initialValue, QObject *guard, const std::function<void(Value)> &slot);
+
+    void setUserValue(const Value &value);
+    void setValue(const sodium::stream<Value> &value, Value initialValue);
+    const sodium::cell<Value> &value() const;
+
+private:
+    QObject *m_guard;
+    sodium::stream_sink<Value> m_sUserValue;
+    sodium::cell<Value> m_value;
+    const std::function<void(Value)> m_slot;
+    std::unique_ptr<UnsubscribeFunction> m_unsubscribe;
+};
+
+template<typename Value>
+UserValue<Value>::UserValue(const Value &initialValue,
+                            QObject *guard,
+                            const std::function<void(Value)> &slot)
+    : m_guard(guard)
+    , m_value(initialValue)
+    , m_slot(slot)
+{
+    setValue({}, initialValue);
+}
+
+template<typename Value>
+void UserValue<Value>::setUserValue(const Value &value)
+{
+    m_sUserValue.send(value);
+}
+
+template<typename Value>
+void UserValue<Value>::setValue(const sodium::stream<Value> &value, Value initialValue)
+{
+    m_value = calm(m_sUserValue.or_else(value).hold(initialValue));
+    // use m_isChecked.sample in the potentially async listener,
+    // in case a user change is posted in between
+    m_unsubscribe.reset(new UnsubscribeFunction(
+        m_value.listen(post<Value>(m_guard, [this](Value) { m_slot(m_value.sample()); }))));
+}
+
+template<typename Value>
+const sodium::cell<Value> &UserValue<Value>::value() const
+{
+    return m_value;
+}
+
 #define DEFINE_BOOL_TYPE(type) \
     class type \
     { \

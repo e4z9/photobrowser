@@ -285,10 +285,10 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     filterInput->setClearButtonEnabled(true);
     stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
     auto recursiveCheckBox = new SQCheckBox(recursiveText);
-    recursiveCheckBox->setChecked(sIsRecursive);
+    recursiveCheckBox->setChecked(sIsRecursive, false);
     stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
     auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText);
-    videosOnlyCheckbox->setChecked(sVideosOnly);
+    videosOnlyCheckbox->setChecked(sVideosOnly, false);
 
     const auto cIsRecursive = recursiveCheckBox->cChecked().map(&IsRecursive::fromBool);
     const auto cFilter = videosOnlyCheckbox->cChecked()

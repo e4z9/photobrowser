@@ -1,4 +1,5 @@
 #include "sqtools.h"
+
 void post(QObject *guard, const std::function<void()> &action)
 
 {

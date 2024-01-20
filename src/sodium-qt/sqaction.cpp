@@ -8,9 +8,10 @@ SQAction::SQAction(QObject *parent)
 
 SQAction::SQAction(const sodium::cell<QString> &text, QObject *parent)
     : QAction(parent)
-    , m_isChecked(false)
+    , m_isChecked(false, this, [this](bool v) { QAction::setChecked(v); })
 {
     connect(this, &QAction::triggered, this, [this] { m_sTriggered.send({}); });
+    connect(this, &QAction::toggled, this, [this](bool c) { m_isChecked.setUserValue(c); });
     setText(text);
 }
 
@@ -30,14 +31,7 @@ void SQAction::setEnabled(const sodium::cell<bool> &enabled)
 void SQAction::setChecked(const sodium::stream<bool> &checked, bool initialState)
 {
     setCheckable(true);
-    stream_sink<bool> sUserChecked;
-    connect(this, &QAction::toggled, this, [sUserChecked](bool c) { sUserChecked.send(c); });
-    m_isChecked = calm(sUserChecked.or_else(checked).hold(initialState));
-    // use m_isChecked.sample in the potentially async listener,
-    // in case a user change is posted in between
-    m_unsubscribe.insert_or_assign("checked", m_isChecked.listen(post<bool>(this, [this](bool) {
-        QAction::setChecked(m_isChecked.sample());
-    })));
+    m_isChecked.setValue(checked, initialState);
 }
 
 const sodium::stream<unit> &SQAction::sTriggered() const
@@ -47,10 +41,10 @@ const sodium::stream<unit> &SQAction::sTriggered() const
 
 const stream<bool> SQAction::sChecked() const
 {
-    return m_isChecked.updates();
+    return m_isChecked.value().updates();
 }
 
 const sodium::cell<bool> &SQAction::cChecked() const
 {
-    return m_isChecked;
+    return m_isChecked.value();
 }
