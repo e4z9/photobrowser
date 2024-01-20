@@ -9,14 +9,13 @@
 class SQAction : public QAction
 {
 public:
+    explicit SQAction(QObject *parent = nullptr);
     SQAction(const sodium::cell<QString> &text, QObject *parent = nullptr);
-    SQAction(const sodium::cell<QString> &text,
-             const sodium::cell<bool> &enabled,
-             QObject *parent = nullptr);
-    SQAction(const sodium::cell<QString> &text,
-             const sodium::stream<bool> &sChecked,
-             const sodium::cell<bool> &enabled,
-             QObject *parent = nullptr);
+
+    void setText(const sodium::cell<QString> &text);
+    void setEnabled(const sodium::cell<bool> &enabled);
+
+    void setChecked(const sodium::stream<bool> &checked, bool initialState);
 
     const sodium::stream<sodium::unit> &sTriggered() const;
 

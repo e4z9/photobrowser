@@ -77,23 +77,24 @@ QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
     };
 
     auto revealInFinder = new SQAction(BrowserWindow::tr("Reveal in Finder"),
-                                       anyItemSelected,
                                        fileMenu);
+    revealInFinder->setEnabled(anyItemSelected);
     revealInFinder->setShortcut({"o"});
     const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->sTriggered());
     m_unsubscribe.insert_or_assign("reveil",
                                    sReveal.listen(post<QString>(this, &Util::revealInFinder)));
 
     auto openInDefaultEditor = new SQAction(BrowserWindow::tr("Open in Default Editor"),
-                                            anyItemSelected,
                                             fileMenu);
+    openInDefaultEditor->setEnabled(anyItemSelected);
     openInDefaultEditor->setShortcut({"ctrl+o"});
     const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered())
                                          .map(&QUrl::fromLocalFile);
     m_unsubscribe.insert_or_assign("openeditor",
                                    sOpenEditor.listen(post<QUrl>(this, &QDesktopServices::openUrl)));
 
-    auto moveToTrash = new SQAction(tr("Move to Trash"), anyItemSelected, fileMenu);
+    auto moveToTrash = new SQAction(tr("Move to Trash"), fileMenu);
+    moveToTrash->setEnabled(anyItemSelected);
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
     const stream<int> sMoveToTrash = moveToTrash->sTriggered()
                                          .snapshot(currentIndex)
@@ -123,25 +124,20 @@ static SortMenu createSortMenu(stream<MediaDirectoryModel::SortKey> sRestoreSort
 
     stream_loop<bool> sSortExifChecked;
     auto sortExif = new SQAction(BrowserWindow::tr("Exif/Creation Date"),
-                                 sSortExifChecked,
-                                 true,
                                  sortMenu);
-    sortExif->setCheckable(true);
-    sortExif->setChecked(true);
+    sortExif->setChecked(sSortExifChecked, true);
     const auto sSortExif = sortExif->sTriggered().map_to(MediaDirectoryModel::SortKey::ExifCreation);
 
     stream_loop<bool> sSortFileNameChecked;
     auto sortFileName = new SQAction(BrowserWindow::tr("File Name"),
-                                     sSortFileNameChecked,
-                                     true,
                                      sortMenu);
-    sortFileName->setCheckable(true);
+    sortFileName->setChecked(sSortFileNameChecked, false);
     const auto sSortFileName = sortFileName->sTriggered().map_to(
         MediaDirectoryModel::SortKey::FileName);
 
     stream_loop<bool> sSortRandomChecked;
-    auto sortRandom = new SQAction(BrowserWindow::tr("Random"), sSortRandomChecked, true, sortMenu);
-    sortRandom->setCheckable(true);
+    auto sortRandom = new SQAction(BrowserWindow::tr("Random"), sortMenu);
+    sortRandom->setChecked(sSortRandomChecked, false);
     const auto sSortRandom = sortRandom->sTriggered().map_to(MediaDirectoryModel::SortKey::Random);
 
     auto sortKeyGroup = new QActionGroup(sortMenu);
@@ -224,31 +220,33 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
     // video actions
     auto videoMenu = new QMenu(BrowserWindow::tr("Video"), parent);
 
-    auto playStop = new SQAction(BrowserWindow::tr("Play/Pause"), videoItemSelected, videoMenu);
+    auto playStop = new SQAction(BrowserWindow::tr("Play/Pause"), videoMenu);
+    playStop->setEnabled(videoItemSelected);
     playStop->setShortcut({"Space"});
 
-    auto stepForward = new SQAction(BrowserWindow::tr("Step Forward"), videoItemSelected, videoMenu);
+    auto stepForward = new SQAction(BrowserWindow::tr("Step Forward"), videoMenu);
+    stepForward->setEnabled(videoItemSelected);
     stepForward->setShortcut({"."});
     const stream<qint64> sForward = stepForward->sTriggered().map(
         [](unit) { return qint64(10000); });
 
     auto stepBackward = new SQAction(BrowserWindow::tr("Step Backward"),
-                                     videoItemSelected,
                                      videoMenu);
+    stepBackward->setEnabled(videoItemSelected);
     stepBackward->setShortcut({","});
     const stream<qint64> sBackward = stepBackward->sTriggered().map(
         [](unit) { return qint64(-10000); });
 
     auto smallStepForward = new SQAction(BrowserWindow::tr("Small Step Forward"),
-                                         videoItemSelected,
                                          videoMenu);
+    smallStepForward->setEnabled(videoItemSelected);
     smallStepForward->setShortcut({"L"});
     const stream<qint64> sSmallForward = smallStepForward->sTriggered().map(
         [](unit) { return qint64(1000); });
 
     auto smallStepBackward = new SQAction(BrowserWindow::tr("Small Step Backward"),
-                                          videoItemSelected,
                                           videoMenu);
+    smallStepBackward->setEnabled(videoItemSelected);
     smallStepBackward->setShortcut({"K"});
     const stream<qint64> sSmallBackward = smallStepBackward->sTriggered().map(
         [](unit) { return qint64(-1000); });
@@ -370,14 +368,14 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto viewMenu = menubar->addMenu(
         tr("Show")); // using "view" adds stupid other actions automatically
 
-    auto recursive = new SQAction(recursiveText, recursiveCheckBox->sChecked(), true, viewMenu);
-    recursive->setCheckable(true);
+    auto recursive = new SQAction(recursiveText, viewMenu);
+    recursive->setChecked(recursiveCheckBox->sChecked(), false);
     // close the loop
     const auto sRestoreRecursive = m_settings.add(kIncludeSubFolders, recursive->cChecked());
     sIsRecursive.loop(sRestoreRecursive.or_else(recursive->sChecked()));
 
-    auto videosOnly = new SQAction(videosOnlyText, videosOnlyCheckbox->sChecked(), true, viewMenu);
-    videosOnly->setCheckable(true);
+    auto videosOnly = new SQAction(videosOnlyText, viewMenu);
+    videosOnly->setChecked(videosOnlyCheckbox->sChecked(), false);
     // close the loop
     const auto sRestoreVideosOnly = m_settings.add(kVideosOnly, videosOnly->cChecked());
     sVideosOnly.loop(sRestoreVideosOnly.or_else(videosOnly->sChecked()));
