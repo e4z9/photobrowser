@@ -10,6 +10,7 @@ class SQLabel : public SQWidgetBase<QLabel>
 {
 public:
     explicit SQLabel(QWidget *parent = nullptr);
+    SQLabel(const sodium::cell<QString> &text, QWidget *parent = nullptr);
 
     void setText(const sodium::cell<QString> &text);
     const sodium::cell<QString> &text() const;

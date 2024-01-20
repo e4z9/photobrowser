@@ -3,9 +3,14 @@
 using namespace sodium;
 
 SQLabel::SQLabel(QWidget *parent)
+    : SQLabel(QString(), parent)
+{}
+
+SQLabel::SQLabel(const sodium::cell<QString> &text, QWidget *parent)
     : SQWidgetBase(parent)
     , m_text(QString())
 {
+    setText(text);
 }
 
 void SQLabel::setText(const sodium::cell<QString> &text)
