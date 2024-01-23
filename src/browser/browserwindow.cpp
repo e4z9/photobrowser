@@ -480,7 +480,7 @@ void BrowserWindow::adaptProgressIndicator()
     const QSize sh = m_progressIndicator->sizeHint();
     QWidget *pp = m_progressIndicator->parentWidget();
     QStyle *st = pp->style();
-    m_progressIndicator->setGeometry(
+    m_progressIndicator->QWidget::setGeometry(
         QRect(pp->width() - sh.width() - st->pixelMetric(QStyle::PM_LayoutRightMargin),
               pp->height() - sh.height() - st->pixelMetric(QStyle::PM_LayoutBottomMargin),
               sh.width(),

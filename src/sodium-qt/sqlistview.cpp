@@ -5,6 +5,7 @@ using namespace sodium;
 SQListView::SQListView(const sodium::stream<boost::optional<int>> &sCurrentIndex)
     : m_currentIndex(boost::none)
     , m_count(0)
+    , m_viewportSize(QSize())
 {
     const stream<boost::optional<int>> sBoundedCurrentIndex = sCurrentIndex.filter(
         [this](const auto &optIndex) {
@@ -46,6 +47,11 @@ void SQListView::setModel(QAbstractItemModel *m)
     updateCountAndCurrent();
 }
 
+const sodium::cell<QSize> &SQListView::viewportSize() const
+{
+    return m_viewportSize;
+}
+
 const sodium::cell<boost::optional<int>> &SQListView::cCurrentIndex() const
 {
     return m_currentIndex;
@@ -64,6 +70,13 @@ void SQListView::currentChanged(const QModelIndex &current, const QModelIndex &p
     if (!previous.isValid() && current.isValid() && !selectionModel()->isSelected(current))
         selectionModel()->select(current, QItemSelectionModel::Select);
     updateCurrent();
+}
+
+bool SQListView::viewportEvent(QEvent *ev)
+{
+    if (ev->type() == QEvent::Resize)
+        m_viewportSize.send(viewport()->size());
+    return SQWidgetBase<QListView>::viewportEvent(ev);
 }
 
 void SQListView::updateCountAndCurrent()

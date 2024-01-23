@@ -47,7 +47,7 @@ private:
 class PI : public Utils::ProgressIndicator
 {
 public:
-    PI()
+    PI(QWidget *parent = nullptr)
         : Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Small)
     {}
 };

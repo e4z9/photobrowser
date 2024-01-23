@@ -267,8 +267,8 @@ Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
         return {};
     });
 
-    m_frontDateFont = font().lift(size(), [](const QFont &f, const QSize &s) {
-        return scaledFont(f, s.height());
+    m_frontDateFont = font().lift(viewportSize(), [](const QFont &f, const QSize &r) {
+        return scaledFont(f, r.height());
     });
 
     m_dateLabel = new SQLabel(this);
@@ -285,9 +285,15 @@ Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
               const QFontMetrics fm(font);
               return QSize(MARGIN + fm.horizontalAdvance(text), fm.height());
           });
-    m_dateLabel->setGeometry(size().lift(textSize, [this](const QSize &rollSize, const QSize &textSize) {
-        return QRect(1, rollSize.height() - textSize.height(), textSize.width(), textSize.height());
-    }));
+    m_dateLabel->setGeometry(viewportSize()
+                                 .lift(textSize,
+                                       [this](const QSize &size, const QSize &textSize) {
+                                           return QRect(1,
+                                                        size.height() - textSize.height(),
+                                                        textSize.width(),
+                                                        textSize.height());
+                                       })
+                                 .updates());
 }
 
 void Fotoroll::setMediaModel(MediaDirectoryModel *model)
