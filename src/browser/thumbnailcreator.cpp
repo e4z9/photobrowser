@@ -167,8 +167,7 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
     QVideoSink sink;
     player.setVideoSink(&sink);
     QEventLoop loop;
-    QObject::connect(&sink, &QVideoSink::videoFrameChanged, [&] {
-        qDebug() << sink.videoFrame();
+    QObject::connect(&sink, &QVideoSink::videoFrameChanged, &loop, [&] {
         fi.reportResult({restrictImageToSize(sink.videoFrame().toImage(), maxSize), duration});
         loop.exit();
     });
