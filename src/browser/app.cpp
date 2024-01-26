@@ -5,8 +5,6 @@
 #include <QFileOpenEvent>
 #include <QTimer>
 
-#include <gst/gst.h>
-
 const char kMainWindow[] = "MainWindow";
 
 static void withGroup(QSettings *settings,
@@ -37,14 +35,11 @@ App::App(QObject *parent)
         qputenv("GST_PLUGIN_SCANNER",
                 (QCoreApplication::applicationDirPath() + "/gst-plugin-scanner").toUtf8());
     }
-
-    gst_init(nullptr, nullptr);
 }
 
 App::~App()
 {
     m_window.reset();
-    gst_deinit();
 }
 
 bool App::eventFilter(QObject *obj, QEvent *ev)

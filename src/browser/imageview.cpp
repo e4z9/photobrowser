@@ -1,11 +1,12 @@
 #include "imageview.h"
 
-#include "gstreamer_utils.h"
-
 #include <sqwidgetbase.h>
 #include <util/util.h>
 #include <qtc/runextensions.h>
 
+#include <QAudioDevice>
+#include <QAudioOutput>
+#include <QCoreApplication>
 #include <QGestureEvent>
 #include <QGraphicsObject>
 #include <QGraphicsPixmapItem>
@@ -13,14 +14,13 @@
 #include <QGuiApplication>
 #include <QLabel>
 #include <QLoggingCategory>
+#include <QMediaPlayer>
 #include <QStackedLayout>
 #include <QStyle>
-
-#include <QCoreApplication>
 #include <QThread>
 #include <QTimer>
-
-#include <gst/gst.h>
+#include <QVideoFrame>
+#include <QVideoSink>
 
 Q_LOGGING_CATEGORY(logView, "browser.viewer", QtWarningMsg)
 
@@ -70,201 +70,115 @@ public:
     // seconds of position, in milliseconds
     const cell<std::optional<qint64>> &position() const;
 
-    // internal
-    GstBusSyncReply message_cb(GstMessage *message);
-    void fetchPreroll();
-    void fetchNewSample();
-    void updatePosition();
-
 private:
-    void init();
-    const int STATE_EOS = GST_STATE_PLAYING + 1;
-    cell_sink<GstState> state;
-    cell_sink<std::optional<QImage>> frame_sink;
-    cell_sink<std::optional<qint64>> position_sink;
-    const cell<bool> m_isPlaying;
-    GstRef<GstElement> pipeline;
-    GstRef<GstElement> source;
-    GstRef<GstElement> sink;
-    GstRef<GstBus> bus;
+    void playForFrameGrabbing();
+    void stopFromFrameGrabbing();
+
+    cell_sink<std::optional<QImage>> m_frame_sink;
+    cell_sink<std::optional<qint64>> m_position_sink;
+    const cell_sink<bool> m_isPlaying_sink;
     Unsubscribe m_unsubscribe;
+    QMediaPlayer m_player;
+    QVideoSink m_videoSink;
+    QAudioOutput m_audioOutput;
+    bool m_playingForFrameGrabbing = false;
 };
-
-static GstBusSyncReply vp_message_cb(GstBus *, GstMessage *m, gpointer player)
-{
-    return reinterpret_cast<VideoPlayer *>(player)->message_cb(m);
-}
-
-static GstFlowReturn new_preroll_cb(GstElement *, VideoPlayer *player)
-{
-    player->fetchPreroll();
-    return GST_FLOW_OK;
-}
-
-static GstFlowReturn new_sample_cb(GstElement *, VideoPlayer *player)
-{
-    player->fetchNewSample();
-    return GST_FLOW_OK;
-}
 
 VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                          const stream<unit> &sTogglePlayVideo,
                          const stream<qint64> &sStepVideo)
-    : state(GST_STATE_NULL)
-    , frame_sink(std::nullopt)
-    , position_sink(std::nullopt)
-    , m_isPlaying(state.map([](GstState s) { return s == GST_STATE_PLAYING; }))
+    : m_frame_sink(std::nullopt)
+    , m_position_sink(std::nullopt)
+    , m_isPlaying_sink(false)
 {
-    pipeline.setCleanUp([](GstElement *e) {
-        if (e)
-            gst_element_set_state(e, GST_STATE_NULL);
-    });
-    init();
-    m_unsubscribe.insert_or_assign(
-        "uri", uri.listen(post<std::optional<QUrl>>(this, [this](const std::optional<QUrl> &uri) {
-            transaction t;
-            init();
-            state.send(GST_STATE_NULL);
-            frame_sink.send(std::nullopt);
-            position_sink.send(std::nullopt);
-            if (source())
-                g_object_set(source(),
-                             "uri",
-                             (uri ? uri->toEncoded().constData() : nullptr),
-                             nullptr);
-            if (pipeline() && uri)
-                gst_element_set_state(pipeline(), GST_STATE_PAUSED);
-        })));
-    m_unsubscribe
-        .insert_or_assign("stepvideo", sStepVideo.listen(post<qint64>(this, [this](qint64 step) {
-            if (!pipeline())
+    m_audioOutput.setDevice(QAudioDevice()); // default system device
+    m_player.setVideoSink(&m_videoSink);
+    m_player.setAudioOutput(&m_audioOutput);
+    connect(
+        &m_player,
+        &QMediaPlayer::playingChanged,
+        this,
+        [this](bool isPlaying) { m_isPlaying_sink.send(isPlaying); },
+        Qt::QueuedConnection);
+    connect(
+        &m_player,
+        &QMediaPlayer::positionChanged,
+        this,
+        [this](qint64 position) { m_position_sink.send(position); },
+        Qt::QueuedConnection);
+    connect(
+        &m_videoSink,
+        &QVideoSink::videoFrameChanged,
+        this,
+        [this](const QVideoFrame &frame) {
+            if (!frame.isValid())
                 return;
-            gint64 position;
-            if (gst_element_query_position(pipeline(), GST_FORMAT_TIME, &position)) {
-                const GstSeekFlags snapOption = step < 0 ? GST_SEEK_FLAG_SNAP_BEFORE
-                                                         : GST_SEEK_FLAG_SNAP_AFTER;
-                gst_element_seek_simple(pipeline(),
-                                        GST_FORMAT_TIME,
-                                        GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT
-                                                     | snapOption),
-                                        std::max(0ll, position + GST_MSECOND * step));
-            }
-        })));
-    m_unsubscribe.insert_or_assign(
-        "toggleplayvideo",
-        sTogglePlayVideo.snapshot(state).listen(post<GstState>(this, [this](GstState state) {
-            if (pipeline()) {
-                if (state == STATE_EOS) {
-                    gst_element_seek_simple(pipeline(),
-                                            GST_FORMAT_TIME,
-                                            GstSeekFlags(GST_SEEK_FLAG_FLUSH
-                                                         | GST_SEEK_FLAG_ACCURATE),
-                                            0);
-                }
-                gst_element_set_state(pipeline(),
-                                      state == GST_STATE_PAUSED || state == STATE_EOS
-                                          ? GST_STATE_PLAYING
-                                          : GST_STATE_PAUSED);
-            }
-        })));
+            m_frame_sink.send(frame.toImage());
+            if (m_playingForFrameGrabbing)
+                stopFromFrameGrabbing();
+        },
+        Qt::QueuedConnection);
+    m_unsubscribe.insert_or_assign("uri",
+                                   uri.listen(ensureSameThread<std::optional<QUrl>>(
+                                       this, [this](const std::optional<QUrl> &uri) {
+                                           m_player.setSource(uri.value_or(QUrl()));
+                                           if (m_player.isAvailable()) {
+                                               // get a first frame
+                                               playForFrameGrabbing();
+                                           }
+                                       })));
+    m_unsubscribe
+        .insert_or_assign("stepvideo",
+                          sStepVideo.listen(ensureSameThread<qint64>(this, [this](qint64 step) {
+                              const qint64 current = m_player.position();
+                              m_player.setPosition(qBound(0, current + step, m_player.duration()));
+                              if (m_player.playbackState() == QMediaPlayer::StoppedState)
+                                  playForFrameGrabbing();
+                          })));
+    m_unsubscribe.insert_or_assign("toggleplayvideo",
+                                   sTogglePlayVideo.snapshot(m_isPlaying_sink)
+                                       .listen(ensureSameThread<bool>(this, [this](bool isPlaying) {
+                                           if (m_player.position() == m_player.duration()) {
+                                               // Special case,
+                                               // if the player is paused when at the end,
+                                               // play() will directly stop again.
+                                               // play from beginning.
+                                               m_player.setPosition(0);
+                                           }
+                                           if (isPlaying)
+                                               m_player.pause();
+                                           else
+                                               m_player.play();
+                                       })));
 }
 
 const cell<std::optional<QImage>> VideoPlayer::frame() const
 {
-    return frame_sink;
+    return m_frame_sink;
 }
 
 const cell<bool> &VideoPlayer::isPlaying() const
 {
-    return m_isPlaying;
+    return m_isPlaying_sink;
 }
 
 const cell<std::optional<qint64>> &VideoPlayer::position() const
 {
-    return position_sink;
+    return m_position_sink;
 }
 
-GstBusSyncReply VideoPlayer::message_cb(GstMessage *message)
+void VideoPlayer::playForFrameGrabbing()
 {
-    if (GST_MESSAGE_SRC(message) == GST_OBJECT(pipeline())) {
-        if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_STATE_CHANGED) {
-            GstState newState;
-            gst_message_parse_state_changed(message, nullptr, &newState, nullptr);
-            state.send(newState);
-        } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {
-            state.send(GstState(STATE_EOS));
-        }
-    }
-    gst_message_unref(message);
-    return GST_BUS_DROP;
+    m_playingForFrameGrabbing = true;
+    m_player.setAudioOutput(nullptr);
+    m_player.play();
 }
 
-void VideoPlayer::fetchPreroll()
+void VideoPlayer::stopFromFrameGrabbing()
 {
-    if (!sink())
-        return;
-    transaction t;
-    updatePosition();
-    GstSample *sample;
-    g_signal_emit_by_name(sink(), "pull-preroll", &sample, nullptr);
-    const std::optional<QImage> image = imageFromGstSample(sample);
-    gst_sample_unref(sample);
-    if (image) // locking of send can interfere with locking of setting GST_STATE_NULL
-        post(this, [this, image] { frame_sink.send(image); });
-}
-
-void VideoPlayer::fetchNewSample()
-{
-    if (!sink())
-        return;
-    transaction t;
-    updatePosition();
-    GstSample *sample;
-    g_signal_emit_by_name(sink(), "pull-sample", &sample, nullptr);
-    const std::optional<QImage> image = imageFromGstSample(sample);
-    gst_sample_unref(sample);
-    if (image) // locking of send can interfere with locking of setting GST_STATE_NULL
-        post(this, [this, image] { frame_sink.send(image); });
-}
-
-void VideoPlayer::updatePosition()
-{
-    gint64 position;
-    if (pipeline() && gst_element_query_position(pipeline(), GST_FORMAT_TIME, &position)) {
-        qint64 secsAsMSecs = position / GST_SECOND * 1000;
-        if (secsAsMSecs != position_sink.sample())
-            position_sink.send({secsAsMSecs});
-        return;
-    }
-    if (position_sink.sample())
-        position_sink.send({});
-}
-
-void VideoPlayer::init()
-{
-    bus.reset();
-    sink.reset();
-    source.reset();
-    GError *error = nullptr;
-    pipeline.reset(gst_parse_launch(
-        "uridecodebin name=source "
-        "source. ! queue ! videoconvert ! videoscale ! videoflip video-direction=auto ! "
-        "appsink name=sink caps=\"video/x-raw,format=RGB,pixel-aspect-ratio=1/1\" "
-        "source. ! queue ! audioconvert ! audioresample ! autoaudiosink",
-        &error));
-    if (error != nullptr) {
-        qWarning(logView) << "gstreamer: failed to create pipeline \"" << error->message << "\"";
-        g_error_free(error);
-        return;
-    }
-    sink.reset(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
-    source.reset(gst_bin_get_by_name(GST_BIN(pipeline()), "source"));
-    bus.reset(gst_pipeline_get_bus(GST_PIPELINE(pipeline())));
-    gst_bus_set_sync_handler(bus(), &vp_message_cb, this, nullptr);
-
-    g_object_set(sink(), "emit-signals", true, nullptr);
-    g_signal_connect(sink(), "new-preroll", G_CALLBACK(&new_preroll_cb), this);
-    g_signal_connect(sink(), "new-sample", G_CALLBACK(&new_sample_cb), this);
+    m_playingForFrameGrabbing = false;
+    m_player.setAudioOutput(&m_audioOutput);
+    m_player.pause();
 }
 
 class VideoGraphicsItem : public QGraphicsItem

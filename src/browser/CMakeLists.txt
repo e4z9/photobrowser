@@ -1,4 +1,4 @@
-find_package(gstreamer-1.0 REQUIRED)
+find_package(${Qt} REQUIRED COMPONENTS Multimedia)
 
 add_executable(photobrowser WIN32 MACOSX_BUNDLE
     app.cpp
@@ -11,8 +11,6 @@ add_executable(photobrowser WIN32 MACOSX_BUNDLE
     filmrollview.h
     fullscreensplitter.cpp
     fullscreensplitter.h
-    gstreamer_utils.cpp
-    gstreamer_utils.h
     imageview.cpp
     imageview.h
     main.cpp
@@ -31,7 +29,8 @@ set_target_properties(photobrowser PROPERTIES
     INSTALL_RPATH "@executable_path/../Frameworks"
 )
 
-target_link_libraries(photobrowser PRIVATE sodium-qt thirdparty_qtc util gstreamer-1.0 ${Qt}::Concurrent)
+target_link_libraries(photobrowser PRIVATE sodium-qt thirdparty_qtc util
+  ${Qt}::Multimedia ${Qt}::Concurrent)
 
 install(TARGETS photobrowser
     BUNDLE

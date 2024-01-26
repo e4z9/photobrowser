@@ -1,16 +1,16 @@
 #include "thumbnailcreator.h"
 
-#include "gstreamer_utils.h"
 #include "mediadirectorymodel.h"
 
 #include <qtc/runextensions.h>
 
 #include <QImageReader>
 #include <QLoggingCategory>
+#include <QMediaPlayer>
 #include <QTimer>
 #include <QUrl>
-
-#include <gst/gst.h>
+#include <QVideoFrame>
+#include <QVideoSink>
 
 template<typename T, typename Function>
 const QFuture<T> &onFinished(const QFuture<T> &future, QObject *guard, Function f)
@@ -149,57 +149,31 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
                                  const QString &resolvedFilePath,
                                  const int maxSize)
 {
-    const QByteArray uri = QUrl::fromLocalFile(resolvedFilePath).toEncoded();
-    GError *error = nullptr;
-    GstRef<GstElement> pipeline(
-        gst_parse_launch(QByteArray(
-                             "uridecodebin uri=" + uri
-                             + " ! videoconvert ! videoscale ! videoflip video-direction=auto !"
-                               " appsink name=sink caps="
-                               "\"video/x-raw,format=RGB,pixel-aspect-ratio=1/1\"")
-                             .constData(),
-                         &error));
-    if (error != nullptr) {
-        qWarning(logThumb) << "gstreamer: failed to create pipeline \"" << error->message << "\"";
-        g_error_free(error);
+    const QUrl url = QUrl::fromLocalFile(resolvedFilePath);
+    QMediaPlayer player;
+    player.setSource(url);
+    if (!player.isAvailable()) {
+        qWarning(logThumb) << "QMediaPlayer: not available" << resolvedFilePath;
         return;
     }
-    GstRef<GstElement> sink(gst_bin_get_by_name(GST_BIN(pipeline()), "sink"));
-    if (fi.isCanceled())
-        return;
-    pipeline.setCleanUp([](GstElement *e) { gst_element_set_state(e, GST_STATE_NULL); });
-    GstStateChangeReturn stateChange = gst_element_set_state(pipeline(), GST_STATE_PAUSED);
-    bool pauseFailed = stateChange == GST_STATE_CHANGE_FAILURE
-                       || stateChange == GST_STATE_CHANGE_NO_PREROLL;
-    if (!pauseFailed) {
-        stateChange = gst_element_get_state(pipeline(), nullptr, nullptr, 3 * GST_SECOND);
-        pauseFailed = stateChange == GST_STATE_CHANGE_FAILURE;
-    }
-    if (pauseFailed) {
-        qWarning(logThumb) << "gstreamer: cannot play file" << resolvedFilePath;
+    if (!player.hasVideo()) {
+        qWarning(logThumb) << "QMediaPlayer: no video" << resolvedFilePath;
         return;
     }
-    if (fi.isCanceled())
-        return;
-    gint64 duration;
-    gst_element_query_duration(pipeline(), GST_FORMAT_TIME, &duration);
-    gint64 snapshotPos = duration < 0 ? (100 * GST_MSECOND) : (duration * 3 / 100);
-    gst_element_seek_simple(pipeline(),
-                            GST_FORMAT_TIME,
-                            GstSeekFlags(GST_SEEK_FLAG_KEY_UNIT | GST_SEEK_FLAG_FLUSH),
-                            snapshotPos);
-    if (fi.isCanceled())
-        return;
-    GstSample *sample;
-    g_signal_emit_by_name(sink(), "pull-preroll", &sample, nullptr);
-    if (fi.isCanceled())
-        return;
-    const std::optional<QImage> image = imageFromGstSample(sample);
-    gst_sample_unref(sample);
-    if (image)
-        fi.reportResult({restrictImageToSize(*image, maxSize), duration / GST_MSECOND});
-    else
-        qWarning(logThumb) << "gstreamer: failed to create thumbnail" << resolvedFilePath;
+
+    const qint64 duration = player.duration();
+    const qint64 snapshotPos = duration * 3 / 100;
+    player.setPosition(snapshotPos);
+    QVideoSink sink;
+    player.setVideoSink(&sink);
+    QEventLoop loop;
+    QObject::connect(&sink, &QVideoSink::videoFrameChanged, [&] {
+        qDebug() << sink.videoFrame();
+        fi.reportResult({restrictImageToSize(sink.videoFrame().toImage(), maxSize), duration});
+        loop.exit();
+    });
+    player.play();
+    loop.exec();
 }
 
 class VideoThumbnailer : public Thumbnailer
