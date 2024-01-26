@@ -75,7 +75,8 @@ void SQListView::currentChanged(const QModelIndex &current, const QModelIndex &p
 bool SQListView::viewportEvent(QEvent *ev)
 {
     if (ev->type() == QEvent::Resize)
-        m_viewportSize.send(viewport()->size());
+        post<QSize>(this,
+                    [this](const QSize &size) { m_viewportSize.send(size); })(viewport()->size());
     return SQWidgetBase<QListView>::viewportEvent(ev);
 }
 
