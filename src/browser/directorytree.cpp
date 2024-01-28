@@ -70,8 +70,8 @@ DirectoryTree::DirectoryTree(const stream<QString> &sRootPath, sodium::stream<QS
     vLayout->addLayout(rootDirLayout);
     vLayout->addWidget(m_dirTree);
     setFocusProxy(m_dirTree);
-
-    const stream<QString> sRootPathUp = rootPathUp->sTriggered().snapshot(m_rootPath,
+    
+    const stream<QString> sRootPathUp = rootPathUp->triggered().snapshot(m_rootPath,
                                                                           [](unit,
                                                                              const QString &root) {
                                                                               QDir dir(root);

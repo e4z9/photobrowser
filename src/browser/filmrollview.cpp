@@ -51,7 +51,7 @@ FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
         [](const auto &) { return unit(); });
     m_selectionUpdate = std::make_unique<SQTimer>(sStartSelectionTimer);
     const cell<OptionalMediaItem> currentItem
-        = m_selectionUpdate->sTimeout().snapshot(m_fotoroll->currentItem()).hold(std::nullopt);
+        = m_selectionUpdate->timedOut().snapshot(m_fotoroll->currentItem()).hold(std::nullopt);
     m_selectionUpdate->setInterval(80);
     m_selectionUpdate->setSingleShot(true);
 
@@ -80,7 +80,7 @@ MediaDirectoryModel *FilmRollView::model() const
 
 const sodium::cell<boost::optional<int>> &FilmRollView::currentIndex() const
 {
-    return m_fotoroll->cCurrentIndex();
+    return m_fotoroll->currentIndex();
 }
 
 const sodium::cell<OptionalMediaItem> &FilmRollView::currentItem() const
@@ -256,8 +256,8 @@ Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
 {
     setFlow(QListView::LeftToRight);
     setItemDelegate(&m_delegate);
-
-    m_currentItem = cCurrentIndex().map([this](boost::optional<int> i) -> OptionalMediaItem {
+    
+    m_currentItem = currentIndex().map([this](boost::optional<int> i) -> OptionalMediaItem {
         if (i) {
             const auto value = model()->data(model()->index(*i, 0),
                                              int(MediaDirectoryModel::Role::Item));

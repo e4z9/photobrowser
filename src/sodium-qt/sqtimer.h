@@ -12,7 +12,7 @@ public:
     explicit SQTimer(const sodium::stream<sodium::unit> &sStart);
     SQTimer(const sodium::stream<sodium::unit> &sStart, const sodium::stream<sodium::unit> &sStop);
 
-    const sodium::stream<sodium::unit> &sTimeout() const;
+    const sodium::stream<sodium::unit> &timedOut() const;
 
 private:
     sodium::stream_sink<sodium::unit> m_sTimeout;

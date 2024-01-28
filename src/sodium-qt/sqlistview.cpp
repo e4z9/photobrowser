@@ -52,7 +52,7 @@ const sodium::cell<QSize> &SQListView::viewportSize() const
     return m_viewportSize;
 }
 
-const sodium::cell<boost::optional<int>> &SQListView::cCurrentIndex() const
+const sodium::cell<boost::optional<int>> &SQListView::currentIndex() const
 {
     return m_currentIndex;
 }
@@ -94,7 +94,7 @@ void SQListView::updateCurrent()
 {
     if (blockChange)
         return;
-    const QModelIndex current = currentIndex();
+    const QModelIndex current = QListView::currentIndex();
     const boost::optional<int> cIndex = m_currentIndex.sample();
     if (current.isValid() != bool(cIndex)
         || (current.isValid() && cIndex && current.row() != *cIndex)) {

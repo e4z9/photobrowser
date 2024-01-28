@@ -491,7 +491,7 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
     m_scaleToFitTimer = std::make_unique<SQTimer>(m_sFitAfterResizeRequest.gate(m_isFittingInView));
     m_scaleToFitTimer->setSingleShot(true);
     m_scaleToFitTimer->setInterval(50);
-    const auto sFitAfterResize = m_scaleToFitTimer->sTimeout().map(
+    const auto sFitAfterResize = m_scaleToFitTimer->timedOut().map(
         [](unit) -> std::optional<qreal> { return {}; });
 
     const auto sScaleCombined = sScale.or_else(m_sPinch).or_else(sFitAfterResize);

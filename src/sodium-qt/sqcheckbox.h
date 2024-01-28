@@ -13,10 +13,9 @@ public:
     SQCheckBox(const sodium::cell<QString> &text, QWidget *parent = nullptr);
 
     void setText(const sodium::cell<QString> &text);
-    void setChecked(const sodium::stream<bool> &sChecked, bool initialValue);
 
-    const sodium::stream<bool> sChecked() const;
-    const sodium::cell<bool> &cChecked() const;
+    void setChecked(const sodium::stream<bool> &sChecked, bool initialValue);
+    const sodium::cell<bool> &isChecked() const;
 
 private:
     UserValue<bool> m_isChecked;

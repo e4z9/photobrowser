@@ -26,12 +26,7 @@ void SQCheckBox::setChecked(const sodium::stream<bool> &sChecked, bool initialVa
     m_isChecked.setValue(sChecked, initialValue);
 }
 
-const stream<bool> SQCheckBox::sChecked() const
-{
-    return m_isChecked.value().updates();
-}
-
-const sodium::cell<bool> &SQCheckBox::cChecked() const
+const sodium::cell<bool> &SQCheckBox::isChecked() const
 {
     return m_isChecked.value();
 }

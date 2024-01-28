@@ -80,7 +80,7 @@ QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
                                        fileMenu);
     revealInFinder->setEnabled(anyItemSelected);
     revealInFinder->setShortcut({"o"});
-    const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->sTriggered());
+    const stream<QString> sReveal = snapshotItemFilePath(revealInFinder->triggered());
     m_unsubscribe.insert_or_assign("reveil",
                                    sReveal.listen(post<QString>(this, &Util::revealInFinder)));
 
@@ -88,7 +88,7 @@ QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
                                             fileMenu);
     openInDefaultEditor->setEnabled(anyItemSelected);
     openInDefaultEditor->setShortcut({"ctrl+o"});
-    const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->sTriggered())
+    const stream<QUrl> sOpenEditor = snapshotItemFilePath(openInDefaultEditor->triggered())
                                          .map(&QUrl::fromLocalFile);
     m_unsubscribe.insert_or_assign("openeditor",
                                    sOpenEditor.listen(post<QUrl>(this, &QDesktopServices::openUrl)));
@@ -96,7 +96,7 @@ QMenu *BrowserWindow::createFileMenu(const cell<OptionalMediaItem> &currentItem,
     auto moveToTrash = new SQAction(tr("Move to Trash"), fileMenu);
     moveToTrash->setEnabled(anyItemSelected);
     moveToTrash->setShortcuts({{"Delete"}, {"Backspace"}});
-    const stream<int> sMoveToTrash = moveToTrash->sTriggered()
+    const stream<int> sMoveToTrash = moveToTrash->triggered()
                                          .snapshot(currentIndex)
                                          .filter(&boost::optional<int>::operator bool)
                                          .map([](const boost::optional<int> &i) { return *i; });
@@ -126,19 +126,19 @@ static SortMenu createSortMenu(stream<MediaDirectoryModel::SortKey> sRestoreSort
     auto sortExif = new SQAction(BrowserWindow::tr("Exif/Creation Date"),
                                  sortMenu);
     sortExif->setChecked(sSortExifChecked, true);
-    const auto sSortExif = sortExif->sTriggered().map_to(MediaDirectoryModel::SortKey::ExifCreation);
+    const auto sSortExif = sortExif->triggered().map_to(MediaDirectoryModel::SortKey::ExifCreation);
 
     stream_loop<bool> sSortFileNameChecked;
     auto sortFileName = new SQAction(BrowserWindow::tr("File Name"),
                                      sortMenu);
     sortFileName->setChecked(sSortFileNameChecked, false);
-    const auto sSortFileName = sortFileName->sTriggered().map_to(
+    const auto sSortFileName = sortFileName->triggered().map_to(
         MediaDirectoryModel::SortKey::FileName);
 
     stream_loop<bool> sSortRandomChecked;
     auto sortRandom = new SQAction(BrowserWindow::tr("Random"), sortMenu);
     sortRandom->setChecked(sSortRandomChecked, false);
-    const auto sSortRandom = sortRandom->sTriggered().map_to(MediaDirectoryModel::SortKey::Random);
+    const auto sSortRandom = sortRandom->triggered().map_to(MediaDirectoryModel::SortKey::Random);
 
     auto sortKeyGroup = new QActionGroup(sortMenu);
     for (auto action : std::vector<QAction *>{sortExif, sortFileName, sortRandom})
@@ -165,16 +165,16 @@ static stream<std::optional<qreal>> addScaleItems(QMenu *viewMenu)
 {
     auto zoomIn = new SQAction(BrowserWindow::tr("Zoom In"), viewMenu);
     zoomIn->setShortcut({"+"});
-    const auto sZoomIn = zoomIn->sTriggered().map([](unit) -> std::optional<qreal> { return 1.1; });
+    const auto sZoomIn = zoomIn->triggered().map([](unit) -> std::optional<qreal> { return 1.1; });
 
     auto zoomOut = new SQAction(BrowserWindow::tr("Zoom Out"), viewMenu);
     zoomOut->setShortcut({"-"});
-    const auto sZoomOut = zoomOut->sTriggered().map(
+    const auto sZoomOut = zoomOut->triggered().map(
         [](unit) -> std::optional<qreal> { return 0.9; });
 
     auto scaleToFit = new SQAction(BrowserWindow::tr("Scale to Fit"), viewMenu);
     scaleToFit->setShortcut({"="});
-    const auto sScaleToFit = scaleToFit->sTriggered().map(
+    const auto sScaleToFit = scaleToFit->triggered().map(
         [](unit) -> std::optional<qreal> { return {}; });
 
     viewMenu->addAction(zoomIn);
@@ -195,12 +195,12 @@ static stream<boost::optional<int>> addNavigationItems(
     auto previousItem = new SQAction(BrowserWindow::tr("Previous"), viewMenu);
     previousItem->setShortcut({"Left"});
     const stream<boost::optional<int>> sPrevious
-        = previousItem->sTriggered().snapshot(currentIndex).map(stepIndex(-1));
+        = previousItem->triggered().snapshot(currentIndex).map(stepIndex(-1));
 
     auto nextItem = new SQAction(BrowserWindow::tr("Next"), viewMenu);
     nextItem->setShortcut({"Right"});
     const stream<boost::optional<int>> sNext
-        = nextItem->sTriggered().snapshot(currentIndex).map(stepIndex(+1));
+        = nextItem->triggered().snapshot(currentIndex).map(stepIndex(+1));
 
     viewMenu->addAction(previousItem);
     viewMenu->addAction(nextItem);
@@ -227,28 +227,28 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
     auto stepForward = new SQAction(BrowserWindow::tr("Step Forward"), videoMenu);
     stepForward->setEnabled(videoItemSelected);
     stepForward->setShortcut({"."});
-    const stream<qint64> sForward = stepForward->sTriggered().map(
+    const stream<qint64> sForward = stepForward->triggered().map(
         [](unit) { return qint64(10000); });
 
     auto stepBackward = new SQAction(BrowserWindow::tr("Step Backward"),
                                      videoMenu);
     stepBackward->setEnabled(videoItemSelected);
     stepBackward->setShortcut({","});
-    const stream<qint64> sBackward = stepBackward->sTriggered().map(
+    const stream<qint64> sBackward = stepBackward->triggered().map(
         [](unit) { return qint64(-10000); });
 
     auto smallStepForward = new SQAction(BrowserWindow::tr("Small Step Forward"),
                                          videoMenu);
     smallStepForward->setEnabled(videoItemSelected);
     smallStepForward->setShortcut({"L"});
-    const stream<qint64> sSmallForward = smallStepForward->sTriggered().map(
+    const stream<qint64> sSmallForward = smallStepForward->triggered().map(
         [](unit) { return qint64(1000); });
 
     auto smallStepBackward = new SQAction(BrowserWindow::tr("Small Step Backward"),
                                           videoMenu);
     smallStepBackward->setEnabled(videoItemSelected);
     smallStepBackward->setShortcut({"K"});
-    const stream<qint64> sSmallBackward = smallStepBackward->sTriggered().map(
+    const stream<qint64> sSmallBackward = smallStepBackward->triggered().map(
         [](unit) { return qint64(-1000); });
 
     videoMenu->addAction(playStop);
@@ -258,7 +258,7 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
     videoMenu->addAction(smallStepBackward);
 
     return {videoMenu,
-            playStop->sTriggered(),
+            playStop->triggered(),
             sForward.or_else(sBackward).or_else(sSmallForward).or_else(sSmallBackward)};
 }
 
@@ -293,9 +293,9 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     cell_loop<MediaDirectoryModel::SortKey> cSortKey;
     m_model = std::make_unique<MediaDirectoryModel>();
     m_model->setPath(m_fileTree->path());
-    m_model->setRecursive(recursiveCheckBox->cChecked());
+    m_model->setRecursive(recursiveCheckBox->isChecked());
     m_model->setFilterString(filterInput->text());
-    m_model->setVideosOnly(videosOnlyCheckbox->cChecked());
+    m_model->setVideosOnly(videosOnlyCheckbox->isChecked());
     m_model->setSortKey(cSortKey);
 
     stream_loop<boost::optional<int>> sCurrentIndex;
@@ -339,7 +339,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     m_progressTimer->setInterval(50);
     m_progressTimer->setSingleShot(true);
     m_progressIndicator = new SProgressIndicator;
-    m_progressIndicator->setVisible(m_progressTimer->sTimeout()
+    m_progressIndicator->setVisible(m_progressTimer->timedOut()
                                         .map_to(true)
                                         .or_else(m_model->sLoadingFinished().map_to(false))
                                         .hold(false));
@@ -364,16 +364,16 @@ BrowserWindow::BrowserWindow(QWidget *parent)
         tr("Show")); // using "view" adds stupid other actions automatically
 
     auto recursive = new SQAction(recursiveText, viewMenu);
-    recursive->setChecked(recursiveCheckBox->sChecked(), false);
+    recursive->setChecked(recursiveCheckBox->isChecked().updates(), false);
     // close the loop
-    const auto sRestoreRecursive = m_settings.add(kIncludeSubFolders, recursive->cChecked());
-    sIsRecursive.loop(sRestoreRecursive.or_else(recursive->sChecked()));
+    const auto sRestoreRecursive = m_settings.add(kIncludeSubFolders, recursive->isChecked());
+    sIsRecursive.loop(sRestoreRecursive.or_else(recursive->isChecked().updates()));
 
     auto videosOnly = new SQAction(videosOnlyText, viewMenu);
-    videosOnly->setChecked(videosOnlyCheckbox->sChecked(), false);
+    videosOnly->setChecked(videosOnlyCheckbox->isChecked().updates(), false);
     // close the loop
-    const auto sRestoreVideosOnly = m_settings.add(kVideosOnly, videosOnly->cChecked());
-    sVideosOnly.loop(sRestoreVideosOnly.or_else(videosOnly->sChecked()));
+    const auto sRestoreVideosOnly = m_settings.add(kVideosOnly, videosOnly->isChecked());
+    sVideosOnly.loop(sRestoreVideosOnly.or_else(videosOnly->isChecked().updates()));
 
     viewMenu->addAction(recursive);
     viewMenu->addAction(videosOnly);
@@ -387,7 +387,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto filter = new SQAction(tr("Search"), viewMenu);
     filter->setShortcut({"Ctrl+F"});
     m_unsubscribe.insert_or_assign("filtertriggered",
-                                   filter->sTriggered().listen(
+                                   filter->triggered().listen(
                                        post<unit>(filterInput, [filterInput](unit) {
                                            filterInput->setFocus(Qt::OtherFocusReason);
                                            filterInput->selectAll();
@@ -413,7 +413,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     toggleFullscreen->setShortcut({"Meta+Ctrl+F"});
     // event filter will send new value to m_sFullscreen, so do post
     m_unsubscribe.insert_or_assign("togglefullscreentriggered",
-                                   toggleFullscreen->sTriggered().listen(
+                                   toggleFullscreen->triggered().listen(
                                        post<unit>(this, [this](unit) {
                                            if (window()->isFullScreen()) {
                                                window()->setWindowState(m_previousWindowState

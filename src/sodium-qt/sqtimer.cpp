@@ -20,7 +20,7 @@ SQTimer::SQTimer(const sodium::stream<sodium::unit> &sStart,
                                        })));
 }
 
-const sodium::stream<sodium::unit> &SQTimer::sTimeout() const
+const sodium::stream<sodium::unit> &SQTimer::timedOut() const
 {
     return m_sTimeout;
 }

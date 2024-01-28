@@ -15,7 +15,7 @@ public:
 
     const sodium::cell<QSize> &viewportSize() const;
 
-    const sodium::cell<boost::optional<int>> &cCurrentIndex() const;
+    const sodium::cell<boost::optional<int>> &currentIndex() const;
     const sodium::cell<int> &count() const;
 
 protected:
