@@ -275,7 +275,9 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     stream_loop<QString> sRootPath;
     stream_loop<QString> sPath;
-    m_fileTree = new DirectoryTree(sRootPath, sPath);
+    m_fileTree = new DirectoryTree;
+    m_fileTree->setRootPath(sRootPath);
+    m_fileTree->setPath(sPath);
     const auto sRootPathSettings = m_settings.add(kRootPath, m_fileTree->rootPath());
     const auto sPathSettings = m_settings.add(kCurrentPath, m_fileTree->path());
     sRootPath.loop(sRootPathSettings);

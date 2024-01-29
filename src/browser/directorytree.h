@@ -12,13 +12,18 @@ class QFileSystemModel;
 class QTreeView;
 QT_END_NAMESPACE
 
+class SQAction;
+
 class DirectoryTree : public QWidget
 {
     Q_OBJECT
 public:
-    explicit DirectoryTree(const sodium::stream<QString> &sRootPath, sodium::stream<QString> &sPath);
+    explicit DirectoryTree(QWidget *parent = nullptr);
 
+    void setRootPath(const sodium::stream<QString> &rootPath);
     const sodium::cell<QString> &rootPath() const;
+
+    void setPath(const sodium::stream<QString> &path);
     const sodium::cell<QString> &path() const;
 
 private:
@@ -28,7 +33,8 @@ private:
     QComboBox *m_dirSelector;
     QTreeView *m_dirTree;
     QFileSystemModel *m_dirModel;
-    sodium::cell_loop<QString> m_rootPath;
-    sodium::cell<QString> m_path;
+    UserValue<QString> m_rootPath;
+    UserValue<QString> m_path;
+    SQAction *m_rootPathUpAction = nullptr;
     Unsubscribe m_unsubscribe;
 };
