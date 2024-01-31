@@ -107,15 +107,13 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 
 } // namespace
 
-MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
-                                         const sodium::cell<bool> &isRecursive,
-                                         const sodium::cell<Filter> &filter,
-                                         const cell<SortKey> &sortKey)
-    : m_path(path)
-    , m_isRecursive(isRecursive)
-    , m_filter(filter)
-    , m_sortKey(sortKey)
-    , m_showDateDisplay(m_sortKey.map([](SortKey key) { return key == SortKey::ExifCreation; }))
+MediaDirectoryModel::MediaDirectoryModel()
+    : m_path(QString())
+    , m_isRecursive(false)
+    , m_filterString(QString())
+    , m_videosOnly(false)
+    , m_sortKey(SortKey::ExifCreation)
+    , m_showDateDisplay(true)
 {
     connect(&m_thumbnailCreator,
             &ThumbnailCreator::thumbnailReady,
@@ -130,7 +128,7 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
                         if (duration)
                             item.metaData.duration = duration;
                         const QModelIndex mi = index(i, 0, QModelIndex());
-                        dataChanged(mi, mi);
+                        emit dataChanged(mi, mi);
                     }
                 }
             });
@@ -138,25 +136,55 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
         for (const auto &value : m_futureWatcher.resultAt(index))
             insertItems(value.first, value.second);
     });
-
-    m_unsubscribe.insert_or_assign("path", m_path.listen(post<QString>(this, [this](QString) {
-        load(); /*trigger reload*/
-    })));
-    m_unsubscribe.insert_or_assign("recursive", m_isRecursive.listen(post<bool>(this, [this](bool) {
-        load(); /*trigger reload*/
-    })));
-    m_unsubscribe.insert_or_assign("filter", m_filter.listen(post<Filter>(this, [this](Filter) {
-        load(); /*trigger reload*/
-    })));
-    m_unsubscribe.insert_or_assign("sortkey",
-                                   m_sortKey.listen(post<SortKey>(this, [this](SortKey key) {
-                                       setSortKey(key);
-                                   })));
+    setSortKey(SortKey::ExifCreation);
 }
 
 MediaDirectoryModel::~MediaDirectoryModel()
 {
     cancelAndWait();
+}
+
+void MediaDirectoryModel::setPath(const sodium::cell<QString> &path)
+{
+    m_path = path;
+    m_unsubscribe.insert_or_assign("path", m_path.listen(post<QString>(this, [this](QString) {
+        load(); /*trigger reload*/
+    })));
+}
+
+void MediaDirectoryModel::setRecursive(const sodium::cell<bool> &recursive)
+{
+    m_isRecursive = recursive;
+    m_unsubscribe.insert_or_assign("recursive", m_isRecursive.listen(post<bool>(this, [this](bool) {
+        load(); /*trigger reload*/
+    })));
+}
+
+void MediaDirectoryModel::setSortKey(const sodium::cell<SortKey> &sortKey)
+{
+    m_sortKey = sortKey;
+    m_showDateDisplay = m_sortKey.map([](SortKey key) { return key == SortKey::ExifCreation; });
+    m_unsubscribe.insert_or_assign("sortkey",
+                                   m_sortKey.listen(post<SortKey>(this, [this](SortKey key) {
+                                       setSortKeyInternal(key);
+                                   })));
+}
+
+void MediaDirectoryModel::setFilterString(const sodium::cell<QString> &filterString)
+{
+    m_filterString = filterString;
+    m_unsubscribe.insert_or_assign("filterString",
+                                   m_filterString.listen(post<QString>(this, [this](QString) {
+                                       load(); /*trigger reload*/
+                                   })));
+}
+
+void MediaDirectoryModel::setVideosOnly(const sodium::cell<bool> &videosOnly)
+{
+    m_videosOnly = videosOnly;
+    m_unsubscribe.insert_or_assign("videosOnly", m_videosOnly.listen(post<bool>(this, [this](bool) {
+        load(); /*trigger reload*/
+    })));
 }
 
 static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &type)
@@ -171,7 +199,8 @@ static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &typ
 
 static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList> &fi,
                                const QString &path,
-                               MediaDirectoryModel::Filter filter)
+                               const QString &filterString,
+                               bool videosOnly)
 {
     // scraped from https://cgit.freedesktop.org/xdg/shared-mime-info/plain/freedesktop.org.xml.in
     static QList<QByteArray> videoMimeTypes = {"video/x-flv",
@@ -210,7 +239,8 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
     QList<std::optional<MediaItem>> optItems = QtConcurrent::blockingMapped(
         sThreadPool,
         entryList,
-        [filter, &mdb, fi, supported](const QFileInfo &entry) -> std::optional<MediaItem> {
+        [filterString, videosOnly, &mdb, fi, supported](
+            const QFileInfo &entry) -> std::optional<MediaItem> {
             const auto regexesFromString = [](const QString &s) {
                 static const QRegularExpression whiteSpace("\\s+");
                 const auto strings = s.split(whiteSpace);
@@ -227,9 +257,8 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                 return result;
             };
             const std::optional<QList<QRegularExpression>> regexes
-                = filter.searchString.isEmpty()
-                      ? std::nullopt
-                      : std::make_optional(regexesFromString(filter.searchString));
+                = filterString.isEmpty() ? std::nullopt
+                                         : std::make_optional(regexesFromString(filterString));
             const auto passesFilter = [regexes](const QList<QString> &entries) {
                 if (!regexes)
                     return true;
@@ -247,7 +276,7 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
                 return {};
             MediaType type;
             if (containsMimeType(supported, mimeType)) {
-                if (filter.videosOnly)
+                if (videosOnly)
                     return {};
                 type = MediaType::Image;
             } else if (containsMimeType(videoMimeTypes, mimeType)) {
@@ -285,15 +314,17 @@ void MediaDirectoryModel::load()
     cancelAndWait();
     const QString path = m_path.sample();
     const bool recursive = m_isRecursive.sample();
-    const Filter showOption = m_filter.sample();
+    const QString filterString = m_filterString.sample();
+    const bool videosOnly = m_videosOnly.sample();
     const SortKey sortKey = m_sortKey.sample();
     beginResetModel();
     m_items.clear();
     endResetModel();
-    m_futureWatcher.setFuture(Utils::runAsync(
-        [this, sortKey, path, showOption, recursive](QFutureInterface<ResultList> &fi) {
+    m_futureWatcher.setFuture(
+        Utils::runAsync([this, sortKey, path, filterString, videosOnly, recursive](
+                            QFutureInterface<ResultList> &fi) {
             m_sLoadingStarted.send({});
-            MediaItems results = collectItems(fi, path, showOption);
+            MediaItems results = collectItems(fi, path, filterString, videosOnly);
             if (fi.isCanceled())
                 return;
             arrange(results, sortKey);
@@ -307,7 +338,7 @@ void MediaDirectoryModel::load()
                     if (fi.isCanceled())
                         break;
                     const QString dir = it.next();
-                    MediaItems dirResults = collectItems(fi, dir, showOption);
+                    MediaItems dirResults = collectItems(fi, dir, filterString, videosOnly);
                     arrange(dirResults, sortKey);
                     const ResultList resultList = addArranged(sortKey, results, dirResults);
                     if (!fi.isCanceled() && !resultList.empty())
@@ -341,7 +372,7 @@ const sodium::stream<unit> &MediaDirectoryModel::sLoadingFinished() const
     return m_sLoadingFinished;
 }
 
-void MediaDirectoryModel::setSortKey(SortKey key)
+void MediaDirectoryModel::setSortKeyInternal(SortKey key)
 {
     if (m_futureWatcher.isRunning()) {
         // we need to restart the scanning

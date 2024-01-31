@@ -46,20 +46,17 @@ class MediaDirectoryModel : public QAbstractItemModel
     Q_OBJECT
 
 public:
-    struct Filter
-    {
-        QString searchString;
-        bool videosOnly;
-    };
-
     enum class Role { Item = Qt::UserRole, Thumbnail, ShowDateDisplay, DateDisplay };
     enum class SortKey { ExifCreation, FileName, Random };
 
-    MediaDirectoryModel(const sodium::cell<QString> &path,
-                        const sodium::cell<bool> &isRecursive,
-                        const sodium::cell<Filter> &filter,
-                        const sodium::cell<SortKey> &sortKey);
+    MediaDirectoryModel();
     ~MediaDirectoryModel() override;
+
+    void setPath(const sodium::cell<QString> &path);
+    void setRecursive(const sodium::cell<bool> &recursive);
+    void setSortKey(const sodium::cell<SortKey> &sortKey);
+    void setFilterString(const sodium::cell<QString> &filterString);
+    void setVideosOnly(const sodium::cell<bool> &videosOnly);
 
     const sodium::stream<sodium::unit> &sLoadingStarted() const;
     const sodium::stream<sodium::unit> &sLoadingFinished() const;
@@ -79,16 +76,18 @@ public:
 
 private:
     void load();
-    void setSortKey(SortKey key);
+    void setSortKeyInternal(SortKey key);
     void insertItems(int index, const MediaItems &items);
     void cancelAndWait();
+    void setupDateDisplay();
 
     MediaItems m_items;
     QFutureWatcher<ResultList> m_futureWatcher;
     mutable ThumbnailCreator m_thumbnailCreator;
     sodium::cell<QString> m_path;
     sodium::cell<bool> m_isRecursive;
-    sodium::cell<Filter> m_filter;
+    sodium::cell<QString> m_filterString;
+    sodium::cell<bool> m_videosOnly;
     sodium::cell<SortKey> m_sortKey;
     sodium::cell<bool> m_showDateDisplay;
     sodium::stream_sink<sodium::unit> m_sLoadingStarted;

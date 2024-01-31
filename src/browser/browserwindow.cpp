@@ -290,15 +290,13 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText);
     videosOnlyCheckbox->setChecked(sVideosOnly, false);
 
-    const auto cFilter = videosOnlyCheckbox->cChecked()
-                             .lift(filterInput->text(), [](bool b, const QString &t) {
-                                 return MediaDirectoryModel::Filter({t, b});
-                             });
     cell_loop<MediaDirectoryModel::SortKey> cSortKey;
-    m_model = std::make_unique<MediaDirectoryModel>(m_fileTree->path(),
-                                                    recursiveCheckBox->cChecked(),
-                                                    cFilter,
-                                                    cSortKey);
+    m_model = std::make_unique<MediaDirectoryModel>();
+    m_model->setPath(m_fileTree->path());
+    m_model->setRecursive(recursiveCheckBox->cChecked());
+    m_model->setFilterString(filterInput->text());
+    m_model->setVideosOnly(videosOnlyCheckbox->cChecked());
+    m_model->setSortKey(cSortKey);
 
     stream_loop<boost::optional<int>> sCurrentIndex;
     stream_loop<unit> sTogglePlayVideo;
