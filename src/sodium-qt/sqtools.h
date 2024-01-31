@@ -145,18 +145,3 @@ const sodium::cell<Value> &UserValue<Value>::value() const
 {
     return m_value;
 }
-
-#define DEFINE_BOOL_TYPE(type) \
-    class type \
-    { \
-    public: \
-        type(bool b) \
-            : value(b) \
-        {} \
-        operator bool() const { return value; } \
-        bool toBool() { return value; } \
-        static type fromBool(bool b) { return b; } \
-\
-    private: \
-        bool value; \
-    };

@@ -41,8 +41,6 @@ Q_DECLARE_METATYPE(MediaItem)
 QString durationToString(const qint64 durationMs);
 QString sizeToString(const qint64 size);
 
-DEFINE_BOOL_TYPE(IsRecursive)
-
 class MediaDirectoryModel : public QAbstractItemModel
 {
     Q_OBJECT
@@ -58,7 +56,7 @@ public:
     enum class SortKey { ExifCreation, FileName, Random };
 
     MediaDirectoryModel(const sodium::cell<QString> &path,
-                        const sodium::cell<IsRecursive> &isRecursive,
+                        const sodium::cell<bool> &isRecursive,
                         const sodium::cell<Filter> &filter,
                         const sodium::cell<SortKey> &sortKey);
     ~MediaDirectoryModel() override;
@@ -89,7 +87,7 @@ private:
     QFutureWatcher<ResultList> m_futureWatcher;
     mutable ThumbnailCreator m_thumbnailCreator;
     sodium::cell<QString> m_path;
-    sodium::cell<IsRecursive> m_isRecursive;
+    sodium::cell<bool> m_isRecursive;
     sodium::cell<Filter> m_filter;
     sodium::cell<SortKey> m_sortKey;
     sodium::cell<bool> m_showDateDisplay;

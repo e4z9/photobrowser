@@ -108,7 +108,7 @@ MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
 } // namespace
 
 MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
-                                         const cell<IsRecursive> &isRecursive,
+                                         const sodium::cell<bool> &isRecursive,
                                          const sodium::cell<Filter> &filter,
                                          const cell<SortKey> &sortKey)
     : m_path(path)
@@ -142,10 +142,9 @@ MediaDirectoryModel::MediaDirectoryModel(const cell<QString> &path,
     m_unsubscribe.insert_or_assign("path", m_path.listen(post<QString>(this, [this](QString) {
         load(); /*trigger reload*/
     })));
-    m_unsubscribe.insert_or_assign("recursive",
-                                   m_isRecursive.listen(post<IsRecursive>(this, [this](IsRecursive) {
-                                       load(); /*trigger reload*/
-                                   })));
+    m_unsubscribe.insert_or_assign("recursive", m_isRecursive.listen(post<bool>(this, [this](bool) {
+        load(); /*trigger reload*/
+    })));
     m_unsubscribe.insert_or_assign("filter", m_filter.listen(post<Filter>(this, [this](Filter) {
         load(); /*trigger reload*/
     })));
@@ -285,7 +284,7 @@ void MediaDirectoryModel::load()
 {
     cancelAndWait();
     const QString path = m_path.sample();
-    const IsRecursive recursive = m_isRecursive.sample();
+    const bool recursive = m_isRecursive.sample();
     const Filter showOption = m_filter.sample();
     const SortKey sortKey = m_sortKey.sample();
     beginResetModel();
