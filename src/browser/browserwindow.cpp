@@ -262,42 +262,109 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
             sForward.or_else(sBackward).or_else(sSmallForward).or_else(sSmallBackward)};
 }
 
+class FileTreeView : public QWidget
+{
+public:
+    FileTreeView(Settings &settings, QWidget *parent = nullptr);
+
+    SQAction *recursiveAction() { return m_recursiveAction; }
+    SQAction *videosOnlyAction() { return m_videosOnlyAction; }
+    SQAction *searchAction() { return m_searchAction; }
+    const cell<QString> &path() { return m_path; }
+    const cell<QString> &filterString() { return m_filterString; }
+
+private:
+    SQAction *m_recursiveAction = nullptr;
+    SQAction *m_videosOnlyAction = nullptr;
+    SQAction *m_searchAction = nullptr;
+    cell<QString> m_path;
+    cell<QString> m_filterString;
+    Unsubscribe m_unsubscribe;
+};
+
+FileTreeView::FileTreeView(Settings &settings, QWidget *parent)
+    : QWidget(parent)
+    , m_path(QString())
+    , m_filterString(QString())
+{
+    const QString recursiveText = tr("Include Subfolders");
+    const QString videosOnlyText = tr("Videos Only");
+
+    DirectoryTree *tree = new DirectoryTree;
+    stream_loop<QString> sRootPath;
+    stream_loop<QString> sPath;
+    tree->setRootPath(sRootPath);
+    tree->setPath(sPath);
+    const auto sRootPathSettings = settings.add(kRootPath, tree->rootPath());
+    const auto sPathSettings = settings.add(kCurrentPath, tree->path());
+    sRootPath.loop(sRootPathSettings);
+    sPath.loop(sPathSettings);
+    m_path = tree->path();
+
+    SQLineEdit *filter = new SQLineEdit;
+    filter->setClearButtonEnabled(true);
+    m_filterString = filter->text();
+
+    stream_loop<bool> sIsRecursive;
+    auto recursiveCheckBox = new SQCheckBox(recursiveText);
+    recursiveCheckBox->setChecked(sIsRecursive, false);
+    m_recursiveAction = new SQAction(recursiveText, this);
+    m_recursiveAction->setChecked(recursiveCheckBox->isChecked().updates(), false);
+    const auto sRestoreRecursive = settings.add(kIncludeSubFolders, m_recursiveAction->isChecked());
+    sIsRecursive.loop(sRestoreRecursive.or_else(m_recursiveAction->isChecked().updates()));
+
+    stream_loop<bool> sVideosOnly;
+    auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText);
+    videosOnlyCheckbox->setChecked(sVideosOnly, false);
+    m_videosOnlyAction = new SQAction(videosOnlyText, this);
+    m_videosOnlyAction->setChecked(videosOnlyCheckbox->isChecked().updates(), false);
+    const auto sRestoreVideosOnly = settings.add(kVideosOnly, m_videosOnlyAction->isChecked());
+    sVideosOnly.loop(sRestoreVideosOnly.or_else(m_videosOnlyAction->isChecked().updates()));
+
+    m_searchAction = new SQAction(tr("Search"), this);
+    m_searchAction->setShortcut({"Ctrl+F"});
+    m_unsubscribe.insert_or_assign("filtertriggered",
+                                   m_searchAction->triggered().listen(
+                                       post<unit>(filter, [filter](unit) {
+                                           filter->setFocus(Qt::OtherFocusReason);
+                                           filter->selectAll();
+                                       })));
+
+    auto treeLayout = new QVBoxLayout;
+    treeLayout->setContentsMargins(0, 0, 0, 0);
+    setLayout(treeLayout);
+
+    auto bottomLeftWidget = new QWidget;
+    auto bottomLeftLayout = new QVBoxLayout;
+    bottomLeftWidget->setLayout(bottomLeftLayout);
+    auto filterLayout = new QHBoxLayout;
+    filterLayout->addWidget(new QLabel(tr("Search:")));
+    filterLayout->addWidget(filter);
+    bottomLeftLayout->addLayout(filterLayout);
+    bottomLeftLayout->addWidget(recursiveCheckBox);
+    bottomLeftLayout->addWidget(videosOnlyCheckbox);
+
+    treeLayout->addWidget(tree, 10);
+    treeLayout->addWidget(bottomLeftWidget);
+}
+
 BrowserWindow::BrowserWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_splitter(new FullscreenSplitter(m_sFullscreen))
 {
     setCentralWidget(m_splitter);
     m_splitter->setOrientation(Qt::Horizontal);
-    const QString recursiveText = tr("Include Subfolders");
-    const QString videosOnlyText = tr("Videos Only");
 
     transaction t; // ensure single transaction
 
-    stream_loop<QString> sRootPath;
-    stream_loop<QString> sPath;
-    m_fileTree = new DirectoryTree;
-    m_fileTree->setRootPath(sRootPath);
-    m_fileTree->setPath(sPath);
-    const auto sRootPathSettings = m_settings.add(kRootPath, m_fileTree->rootPath());
-    const auto sPathSettings = m_settings.add(kCurrentPath, m_fileTree->path());
-    sRootPath.loop(sRootPathSettings);
-    sPath.loop(sPathSettings);
-
-    auto filterInput = new SQLineEdit;
-    filterInput->setClearButtonEnabled(true);
-    stream_loop<bool> sIsRecursive; // loop for the action's recursive property + settings
-    auto recursiveCheckBox = new SQCheckBox(recursiveText);
-    recursiveCheckBox->setChecked(sIsRecursive, false);
-    stream_loop<bool> sVideosOnly; // loop for the action's videosOnly property + settings
-    auto videosOnlyCheckbox = new SQCheckBox(videosOnlyText);
-    videosOnlyCheckbox->setChecked(sVideosOnly, false);
+    auto tree = new FileTreeView(m_settings);
 
     cell_loop<MediaDirectoryModel::SortKey> cSortKey;
     m_model = std::make_unique<MediaDirectoryModel>();
-    m_model->setPath(m_fileTree->path());
-    m_model->setRecursive(recursiveCheckBox->isChecked());
-    m_model->setFilterString(filterInput->text());
-    m_model->setVideosOnly(videosOnlyCheckbox->isChecked());
+    m_model->setPath(tree->path());
+    m_model->setRecursive(tree->recursiveAction()->isChecked());
+    m_model->setFilterString(tree->filterString());
+    m_model->setVideosOnly(tree->videosOnlyAction()->isChecked());
     m_model->setSortKey(cSortKey);
 
     stream_loop<boost::optional<int>> sCurrentIndex;
@@ -311,31 +378,13 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                       sScale);
     imageView->setModel(m_model.get());
 
-    auto leftWidget = new QWidget;
-    auto leftLayout = new QVBoxLayout;
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftWidget->setLayout(leftLayout);
-
-    auto bottomLeftWidget = new QWidget;
-    auto bottomLeftLayout = new QVBoxLayout;
-    bottomLeftWidget->setLayout(bottomLeftLayout);
-    auto filterLayout = new QHBoxLayout;
-    filterLayout->addWidget(new QLabel(tr("Search:")));
-    filterLayout->addWidget(filterInput);
-    bottomLeftLayout->addLayout(filterLayout);
-    bottomLeftLayout->addWidget(recursiveCheckBox);
-    bottomLeftLayout->addWidget(videosOnlyCheckbox);
-
-    leftLayout->addWidget(m_fileTree, 10);
-    leftLayout->addWidget(bottomLeftWidget);
-
-    m_splitter->setWidget(FullscreenSplitter::First, leftWidget);
+    m_splitter->setWidget(FullscreenSplitter::First, tree);
     m_splitter->setWidget(FullscreenSplitter::Second, imageView);
     m_splitter->setFullscreenIndex(FullscreenSplitter::Second);
 
-    setFocusProxy(m_fileTree);
+    setFocusProxy(tree);
 
-    leftWidget->installEventFilter(this);
+    tree->installEventFilter(this);
     m_progressTimer = std::make_unique<SQTimer>(m_model->sLoadingStarted(),
                                                 m_model->sLoadingFinished());
     m_progressTimer->setInterval(50);
@@ -345,7 +394,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                         .map_to(true)
                                         .or_else(m_model->sLoadingFinished().map_to(false))
                                         .hold(false));
-    m_progressIndicator->setParent(leftWidget);
+    m_progressIndicator->setParent(tree);
     adaptProgressIndicator();
 
     auto menubar = new QMenuBar(this);
@@ -365,20 +414,8 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     auto viewMenu = menubar->addMenu(
         tr("Show")); // using "view" adds stupid other actions automatically
 
-    auto recursive = new SQAction(recursiveText, viewMenu);
-    recursive->setChecked(recursiveCheckBox->isChecked().updates(), false);
-    // close the loop
-    const auto sRestoreRecursive = m_settings.add(kIncludeSubFolders, recursive->isChecked());
-    sIsRecursive.loop(sRestoreRecursive.or_else(recursive->isChecked().updates()));
-
-    auto videosOnly = new SQAction(videosOnlyText, viewMenu);
-    videosOnly->setChecked(videosOnlyCheckbox->isChecked().updates(), false);
-    // close the loop
-    const auto sRestoreVideosOnly = m_settings.add(kVideosOnly, videosOnly->isChecked());
-    sVideosOnly.loop(sRestoreVideosOnly.or_else(videosOnly->isChecked().updates()));
-
-    viewMenu->addAction(recursive);
-    viewMenu->addAction(videosOnly);
+    viewMenu->addAction(tree->recursiveAction());
+    viewMenu->addAction(tree->videosOnlyAction());
 
     stream_loop<MediaDirectoryModel::SortKey> sRestoreSortKey;
     const auto sortMenu = createSortMenu(sRestoreSortKey);
@@ -386,15 +423,7 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     sRestoreSortKey.loop(m_settings.addInt(kSortKey, cSortKey));
     viewMenu->addMenu(sortMenu.menu);
 
-    auto filter = new SQAction(tr("Search"), viewMenu);
-    filter->setShortcut({"Ctrl+F"});
-    m_unsubscribe.insert_or_assign("filtertriggered",
-                                   filter->triggered().listen(
-                                       post<unit>(filterInput, [filterInput](unit) {
-                                           filterInput->setFocus(Qt::OtherFocusReason);
-                                           filterInput->selectAll();
-                                       })));
-    viewMenu->addAction(filter);
+    viewMenu->addAction(tree->searchAction());
 
     viewMenu->addSeparator();
 

@@ -74,7 +74,6 @@ private:
     sodium::stream_sink<bool> m_sFullscreen;
     Qt::WindowStates m_previousWindowState;
     FullscreenSplitter *m_splitter = nullptr;
-    DirectoryTree *m_fileTree = nullptr;
     SProgressIndicator *m_progressIndicator = nullptr;
     std::unique_ptr<SQTimer> m_progressTimer;
     std::unique_ptr<MediaDirectoryModel> m_model;
