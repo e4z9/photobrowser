@@ -262,7 +262,7 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
             sForward.or_else(sBackward).or_else(sSmallForward).or_else(sSmallBackward)};
 }
 
-class FileTreeView : public QWidget
+class FileTreeView : public SQWidgetBase<QWidget>
 {
 public:
     FileTreeView(Settings &settings, QWidget *parent = nullptr);
@@ -283,7 +283,7 @@ private:
 };
 
 FileTreeView::FileTreeView(Settings &settings, QWidget *parent)
-    : QWidget(parent)
+    : SQWidgetBase<QWidget>(parent)
     , m_path(QString())
     , m_filterString(QString())
 {
@@ -384,18 +384,29 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     setFocusProxy(tree);
 
-    tree->installEventFilter(this);
     m_progressTimer = std::make_unique<SQTimer>(m_model->sLoadingStarted(),
                                                 m_model->sLoadingFinished());
     m_progressTimer->setInterval(50);
     m_progressTimer->setSingleShot(true);
-    m_progressIndicator = new SProgressIndicator;
-    m_progressIndicator->setVisible(m_progressTimer->timedOut()
-                                        .map_to(true)
-                                        .or_else(m_model->sLoadingFinished().map_to(false))
-                                        .hold(false));
-    m_progressIndicator->setParent(tree);
-    adaptProgressIndicator();
+    auto progressIndicator = new SProgressIndicator;
+    progressIndicator->setVisible(m_progressTimer->timedOut()
+                                      .map_to(true)
+                                      .or_else(m_model->sLoadingFinished().map_to(false))
+                                      .hold(false));
+    progressIndicator->setGeometry(
+        tree->geometry()
+            .map([progressIndicator](const QRect &r) {
+                const QSize sh = progressIndicator->sizeHint();
+                QStyle *st = progressIndicator->style();
+                const QSize bottomRightMargin{st->pixelMetric(QStyle::PM_LayoutRightMargin),
+                                              st->pixelMetric(QStyle::PM_LayoutBottomMargin)};
+                const QRect coordinateRect = QRect({0, 0}, r.size() - bottomRightMargin);
+                QRect progressGeom = QRect({0, 0}, sh);
+                progressGeom.moveBottomRight(coordinateRect.bottomRight());
+                return progressGeom;
+            })
+            .updates());
+    progressIndicator->setParent(tree);
 
     auto menubar = new QMenuBar(this);
     setMenuBar(menubar);
@@ -490,9 +501,7 @@ void BrowserWindow::save(QSettings *settings)
 
 bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_progressIndicator->parentWidget() && event->type() == QEvent::Resize) {
-        adaptProgressIndicator();
-    } else if (watched == window() && event->type() == QEvent::WindowStateChange) {
+    if (watched == window() && event->type() == QEvent::WindowStateChange) {
         QWindowStateChangeEvent *e = static_cast<QWindowStateChangeEvent *>(event);
         m_previousWindowState = e->oldState();
         if ((m_previousWindowState & Qt::WindowFullScreen)
@@ -501,16 +510,4 @@ bool BrowserWindow::eventFilter(QObject *watched, QEvent *event)
         }
     }
     return QWidget::eventFilter(watched, event);
-}
-
-void BrowserWindow::adaptProgressIndicator()
-{
-    const QSize sh = m_progressIndicator->sizeHint();
-    QWidget *pp = m_progressIndicator->parentWidget();
-    QStyle *st = pp->style();
-    m_progressIndicator->QWidget::setGeometry(
-        QRect(pp->width() - sh.width() - st->pixelMetric(QStyle::PM_LayoutRightMargin),
-              pp->height() - sh.height() - st->pixelMetric(QStyle::PM_LayoutBottomMargin),
-              sh.width(),
-              sh.height()));
 }

@@ -66,7 +66,6 @@ public:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    void adaptProgressIndicator();
     QMenu *createFileMenu(const sodium::cell<OptionalMediaItem> &currentItem,
                           const sodium::cell<boost::optional<int>> &currentIndex);
 
@@ -74,7 +73,6 @@ private:
     sodium::stream_sink<bool> m_sFullscreen;
     Qt::WindowStates m_previousWindowState;
     FullscreenSplitter *m_splitter = nullptr;
-    SProgressIndicator *m_progressIndicator = nullptr;
     std::unique_ptr<SQTimer> m_progressTimer;
     std::unique_ptr<MediaDirectoryModel> m_model;
     Unsubscribe m_unsubscribe;
