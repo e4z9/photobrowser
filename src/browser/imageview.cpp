@@ -118,15 +118,17 @@ VideoPlayer::VideoPlayer(const cell<std::optional<QUrl>> &uri,
                 stopFromFrameGrabbing();
         },
         Qt::QueuedConnection);
-    m_unsubscribe.insert_or_assign("uri",
-                                   uri.listen(ensureSameThread<std::optional<QUrl>>(
-                                       this, [this](const std::optional<QUrl> &uri) {
-                                           m_player.setSource(uri.value_or(QUrl()));
-                                           if (m_player.isAvailable()) {
-                                               // get a first frame
-                                               playForFrameGrabbing();
-                                           }
-                                       })));
+    m_unsubscribe.insert_or_assign(
+        "uri",
+        uri.listen(
+            ensureSameThread<std::optional<QUrl>>(this, [this](const std::optional<QUrl> &uri) {
+                post(this, [this] { m_frame_sink.send({}); }); // hide previous frame
+                m_player.setSource(uri.value_or(QUrl()));
+                if (m_player.isAvailable()) {
+                    // get a first frame
+                    playForFrameGrabbing();
+                }
+            })));
     m_unsubscribe
         .insert_or_assign("stepvideo",
                           sStepVideo.listen(ensureSameThread<qint64>(this, [this](qint64 step) {
