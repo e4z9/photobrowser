@@ -1,3 +1,6 @@
 [submodule "src/3rdparty/PlistCpp"]
 	path = src/3rdparty/PlistCpp
 	url = https://github.com/animetrics/PlistCpp.git
+[submodule "src/3rdparty/sodium-cxx"]
+	path = src/3rdparty/sodium-cxx
+	url = ../sodium-cxx.git
