@@ -8,12 +8,11 @@ Simple photo and video browser.
 100% only tested on macOS.
 
 Uses [exiv2][1] for meta data, [PlistCpp][7] for reading plist data when extracting macOS style
-file tags, [gstreamer][2] for video, [Qt][3] for images and GUI,
+file tags, [Qt][3] for videos, images and GUI,
 [sodium-cxx][4] for functional reactive programming, [CMake][5] as build system,
 and [Haskell Shelly][6] for deployment.
 
 [1]: https://www.exiv2.org/
-[2]: https://gstreamer.freedesktop.org/
 [3]: https://www.qt.io/
 [4]: https://github.com/SodiumFRP/sodium-cxx
 [5]: https://cmake.org/
