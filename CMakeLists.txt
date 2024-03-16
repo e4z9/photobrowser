@@ -28,6 +28,6 @@ find_package(SodiumCxx REQUIRED)
 
 add_subdirectory(src/util)
 add_subdirectory(src/3rdparty/qtc)
-add_subdirectory(src/sodium-qt)
+add_subdirectory(src/3rdparty/sodium-qt)
 add_subdirectory(src/browser)
 add_subdirectory(src/tools/setdatefrommeta)
