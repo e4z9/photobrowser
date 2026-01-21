@@ -2,9 +2,11 @@ find_package(Boost REQUIRED) # boost should be a public dependency of sodium-cxx
 
 if(TARGET libsodium)
   # from submodule
-  add_library(SodiumCxx ALIAS libsodium)
-  set_target_properties(libsodium PROPERTIES
-                        INTERFACE_INCLUDE_DIRECTORIES "${sodium_BINARY_DIR}/include;${Boost_INCLUDE_DIR}")
+  if (NOT TARGET SodiumCxx)
+    add_library(SodiumCxx ALIAS libsodium)
+    set_target_properties(libsodium PROPERTIES
+                          INTERFACE_INCLUDE_DIRECTORIES "${sodium_BINARY_DIR}/include;${Boost_INCLUDE_DIR}")
+  endif()
 else()
   find_library(SodiumCxx_LIBRARIES NAMES libsodium.a) # hmpf
   find_path(SodiumCxx_INCLUDE_DIRS NAMES sodium/sodium.h)
