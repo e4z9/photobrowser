@@ -227,11 +227,12 @@ void MediaItemDelegate::paint(QPainter *painter,
 
 static QSize itemSize(const MediaItem &item)
 {
-    if (item.thumbnail)
-        return item.thumbnail->size();
-    if (item.metaData.dimensions)
-        return *item.metaData.dimensions;
-    return defaultSize();
+    const QSize size = item.thumbnail             ? item.thumbnail->size()
+                       : item.metaData.dimensions ? *item.metaData.dimensions
+                                                  : defaultSize();
+    if (size.width() == 0 || size.height() == 0)
+        return defaultSize();
+    return size;
 }
 
 QSize MediaItemDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
