@@ -27,14 +27,6 @@ App::App(QObject *parent)
         if (!m_settings)
             createWindow({});
     });
-
-    const QString deployedPluginPath = QDir::cleanPath(QCoreApplication::applicationDirPath()
-                                                       + "/../PlugIns/gstreamer-1.0");
-    if (QFile::exists(deployedPluginPath)) {
-        qputenv("GST_PLUGIN_SYSTEM_PATH", deployedPluginPath.toUtf8());
-        qputenv("GST_PLUGIN_SCANNER",
-                (QCoreApplication::applicationDirPath() + "/gst-plugin-scanner").toUtf8());
-    }
 }
 
 App::~App()
