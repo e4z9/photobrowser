@@ -177,7 +177,7 @@ static void paintLink(QPainter *painter, const QStyleOptionViewItem &option)
     };
     ellipse();
     painter->setPen(QPen(Qt::black, 1));
-    painter->setBrush({});
+    painter->setBrush(QBrush());
     ellipse();
     painter->restore();
 }

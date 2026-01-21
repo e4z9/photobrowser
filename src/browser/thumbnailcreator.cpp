@@ -156,21 +156,33 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
         qWarning(logThumb) << "QMediaPlayer: not available" << resolvedFilePath;
         return;
     }
-    if (!player.hasVideo()) {
-        qWarning(logThumb) << "QMediaPlayer: no video" << resolvedFilePath;
-        return;
-    }
 
-    const qint64 duration = player.duration();
-    const qint64 snapshotPos = duration * 3 / 100;
-    player.setPosition(snapshotPos);
+    qint64 duration = 0;
     QVideoSink sink;
     player.setVideoSink(&sink);
     QEventLoop loop;
+    QObject::connect(&player,
+                     &QMediaPlayer::playbackStateChanged,
+                     &loop,
+                     [&](QMediaPlayer::PlaybackState state) {
+                         if (state == QMediaPlayer::PlayingState) {
+                             duration = player.duration();
+                             const qint64 snapshotPos = duration * 3 / 100;
+                             player.setPosition(snapshotPos);
+                         }
+                     });
     QObject::connect(&sink, &QVideoSink::videoFrameChanged, &loop, [&] {
         fi.reportResult({restrictImageToSize(sink.videoFrame().toImage(), maxSize), duration});
         loop.exit();
     });
+    QObject::connect(&player,
+                     &QMediaPlayer::errorOccurred,
+                     &loop,
+                     [&](QMediaPlayer::Error error, const QString &errorString) {
+                         qCDebug(logThumb) << "error occurred while creating thumbnail for"
+                                           << resolvedFilePath << ":" << errorString;
+                         loop.exit();
+                     });
     player.play();
     loop.exec();
 }

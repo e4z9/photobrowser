@@ -72,7 +72,7 @@ public:
     int columnCount(const QModelIndex &parent) const override;
     QVariant data(const QModelIndex &index, int role) const override;
 
-    using ResultList = std::vector<std::pair<int, MediaItems>>;
+    using ResultList = std::vector<std::pair<MediaItems::size_type, MediaItems>>;
 
 private:
     void load();
