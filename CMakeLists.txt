@@ -11,9 +11,8 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(exiv2 REQUIRED)
 
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Core REQUIRED)
-set(Qt "Qt${QT_VERSION_MAJOR}")
-find_package(${Qt} COMPONENTS Core Gui Widgets Concurrent REQUIRED)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Widgets Concurrent)
+set(Qt Qt) # compat for ${Qt}::Foo dependencies
 
 if(APPLE)
     find_library(FWFoundation Foundation)

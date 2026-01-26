@@ -1,4 +1,4 @@
-find_package(${Qt} REQUIRED COMPONENTS Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Multimedia)
 
 add_executable(photobrowser WIN32 MACOSX_BUNDLE
     app.cpp
@@ -30,7 +30,7 @@ set_target_properties(photobrowser PROPERTIES
 )
 
 target_link_libraries(photobrowser PRIVATE sodium-qt thirdparty_qtc util
-  ${Qt}::Multimedia ${Qt}::Concurrent)
+  Qt::Multimedia Qt::Concurrent)
 
 install(TARGETS photobrowser
     BUNDLE
@@ -38,7 +38,7 @@ install(TARGETS photobrowser
     COMPONENT deploy
 )
 
-get_target_property(_moc_binary ${Qt}::moc IMPORTED_LOCATION)
+get_target_property(_moc_binary Qt::moc IMPORTED_LOCATION)
 get_filename_component(_qt_bin_path "${_moc_binary}" DIRECTORY)
 get_filename_component(_qt_path "${_qt_bin_path}/../" ABSOLUTE)
 
