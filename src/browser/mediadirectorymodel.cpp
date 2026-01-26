@@ -2,14 +2,12 @@
 
 #include <util/fileutil.h>
 
-#include <qtc/runextensions.h>
-
 #include <QDir>
 #include <QDirIterator>
 #include <QImageReader>
 #include <QMimeDatabase>
 #include <QRegularExpression>
-#include <QtConcurrent/QtConcurrent>
+#include <QtConcurrent>
 
 #include <algorithm>
 #include <random>
@@ -197,7 +195,7 @@ static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &typ
     return false;
 }
 
-static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList> &fi,
+static MediaItems collectItems(QPromise<MediaDirectoryModel::ResultList> &fi,
                                const QString &path,
                                const QString &filterString,
                                bool videosOnly)
@@ -239,7 +237,7 @@ static MediaItems collectItems(QFutureInterface<MediaDirectoryModel::ResultList>
     QList<std::optional<MediaItem>> optItems = QtConcurrent::blockingMapped(
         sThreadPool,
         entryList,
-        [filterString, videosOnly, &mdb, fi, supported](
+        [filterString, videosOnly, &mdb, &fi, supported](
             const QFileInfo &entry) -> std::optional<MediaItem> {
             const auto regexesFromString = [](const QString &s) {
                 static const QRegularExpression whiteSpace("\\s+");
@@ -320,16 +318,15 @@ void MediaDirectoryModel::load()
     beginResetModel();
     m_items.clear();
     endResetModel();
-    m_futureWatcher.setFuture(
-        Utils::runAsync([this, sortKey, path, filterString, videosOnly, recursive](
-                            QFutureInterface<ResultList> &fi) {
+    m_futureWatcher.setFuture(QtConcurrent::run(
+        [this, sortKey, path, filterString, videosOnly, recursive](QPromise<ResultList> &fi) {
             m_sLoadingStarted.send({});
             MediaItems results = collectItems(fi, path, filterString, videosOnly);
             if (fi.isCanceled())
                 return;
             arrange(results, sortKey);
             if (!results.empty())
-                fi.reportResult({{0, results}});
+                fi.addResult({{0, results}});
             if (recursive) {
                 QDirIterator it(path,
                                 QDir::Dirs | QDir::NoDotAndDotDot,
@@ -342,7 +339,7 @@ void MediaDirectoryModel::load()
                     arrange(dirResults, sortKey);
                     const ResultList resultList = addArranged(sortKey, results, dirResults);
                     if (!fi.isCanceled() && !resultList.empty())
-                        fi.reportResult(resultList);
+                        fi.addResult(resultList);
                 }
             }
             m_sLoadingFinished.send({});

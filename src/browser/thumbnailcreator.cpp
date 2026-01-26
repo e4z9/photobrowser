@@ -2,8 +2,6 @@
 
 #include "mediadirectorymodel.h"
 
-#include <qtc/runextensions.h>
-
 #include <QImageReader>
 #include <QLoggingCategory>
 #include <QMediaPlayer>
@@ -11,18 +9,7 @@
 #include <QUrl>
 #include <QVideoFrame>
 #include <QVideoSink>
-
-template<typename T, typename Function>
-const QFuture<T> &onFinished(const QFuture<T> &future, QObject *guard, Function f)
-{
-    auto watcher = new QFutureWatcher<T>();
-    QObject::connect(watcher, &QFutureWatcherBase::finished, guard, [f, watcher] {
-        f(watcher->future());
-    });
-    QObject::connect(watcher, &QFutureWatcherBase::finished, watcher, &QObject::deleteLater);
-    watcher->setFuture(future);
-    return future;
-}
+#include <QtConcurrent>
 
 Q_LOGGING_CATEGORY(logThumb, "browser.thumbnails", QtWarningMsg)
 const int THUMBNAIL_SIZE = 400;
@@ -48,7 +35,7 @@ QImage restrictImageToSize(const QImage &image, int maxSize)
     return image;
 }
 
-void createThumbnailImage(QFutureInterface<QImage> &fi,
+void createThumbnailImage(QPromise<QImage> &fi,
                           const QString &filePath,
                           const Util::Orientation orientation,
                           const int maxSize)
@@ -57,13 +44,13 @@ void createThumbnailImage(QFutureInterface<QImage> &fi,
     if (fi.isCanceled())
         return;
     if (image.isNull()) {
-        fi.reportResult(image);
+        fi.addResult(image);
         return;
     }
     image = image.transformed(Util::matrixForOrientation(image.size(), orientation).toTransform());
     if (fi.isCanceled())
         return;
-    fi.reportResult(restrictImageToSize(image, maxSize));
+    fi.addResult(restrictImageToSize(image, maxSize));
 }
 
 class PictureThumbnailer : public Thumbnailer
@@ -122,30 +109,29 @@ void PictureThumbnailer::requestThumbnail(const QString &resolvedFilePath,
                                           const int maxSize)
 {
     qDebug(logThumb) << "starting" << resolvedFilePath;
-    auto future = Utils::runAsync(createThumbnailImage, resolvedFilePath, orientation, maxSize);
+    auto future = QtConcurrent::run(createThumbnailImage, resolvedFilePath, orientation, maxSize);
     m_running.emplace_back(resolvedFilePath, future);
-    onFinished(future,
-               this,
-               [this, resolvedFilePath](const QFuture<QImage> &future) {
-                   auto runningItem = std::find_if(m_running.begin(),
-                                                   m_running.end(),
-                                                   [resolvedFilePath](const RunningItem &item) {
-                                                       return item.first == resolvedFilePath;
-                                                   });
-                   if (runningItem != m_running.end())
-                       m_running.erase(runningItem);
-                   else
-                       qWarning(logThumb)
-                           << "PictureThumbnailer internal error: Could not find running future";
-                   if (!future.isCanceled() && future.resultCount() > 0) {
-                       qDebug(logThumb) << "finished" << resolvedFilePath;
-                       const auto result = future.result();
-                       emit thumbnailReady(resolvedFilePath, result, std::nullopt);
-                   }
-               });
+    future.then(this,
+                [this, resolvedFilePath](const QFuture<QImage> &future) {
+                    auto runningItem = std::find_if(m_running.begin(),
+                                                    m_running.end(),
+                                                    [resolvedFilePath](const RunningItem &item) {
+                                                        return item.first == resolvedFilePath;
+                                                    });
+                    if (runningItem != m_running.end())
+                        m_running.erase(runningItem);
+                    else
+                        qWarning(logThumb)
+                            << "PictureThumbnailer internal error: Could not find running future";
+                    if (!future.isCanceled() && future.resultCount() > 0) {
+                        qDebug(logThumb) << "finished" << resolvedFilePath;
+                        const auto result = future.result();
+                        emit thumbnailReady(resolvedFilePath, result, std::nullopt);
+                    }
+                });
 }
 
-static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
+static void createVideoThumbnail(QPromise<ThumbnailItem> &fi,
                                  const QString &resolvedFilePath,
                                  const int maxSize)
 {
@@ -172,7 +158,7 @@ static void createVideoThumbnail(QFutureInterface<ThumbnailItem> &fi,
                          }
                      });
     QObject::connect(&sink, &QVideoSink::videoFrameChanged, &loop, [&] {
-        fi.reportResult({restrictImageToSize(sink.videoFrame().toImage(), maxSize), duration});
+        fi.addResult({restrictImageToSize(sink.videoFrame().toImage(), maxSize), duration});
         loop.exit();
     });
     QObject::connect(&player,
@@ -237,8 +223,8 @@ void VideoThumbnailer::requestThumbnail(const QString &resolvedFilePath,
     qDebug(logThumb) << "starting" << resolvedFilePath;
     m_currentFilePath = resolvedFilePath;
     QFutureInterface<ThumbnailItem> foo;
-    m_future = Utils::runAsync(createVideoThumbnail, resolvedFilePath, maxSize);
-    onFinished(m_future, this, [this, resolvedFilePath](const QFuture<ThumbnailItem> &future) {
+    m_future = QtConcurrent::run(createVideoThumbnail, resolvedFilePath, maxSize);
+    m_future.then(this, [this, resolvedFilePath](const QFuture<ThumbnailItem> &future) {
         qDebug(logThumb) << "finished" << resolvedFilePath;
         if (!future.isCanceled() && future.resultCount() > 0) {
             const auto result = future.result();

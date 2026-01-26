@@ -2,7 +2,6 @@
 
 #include <sqwidgetbase.h>
 #include <util/util.h>
-#include <qtc/runextensions.h>
 
 #include <QAudioDevice>
 #include <QAudioOutput>
@@ -21,6 +20,7 @@
 #include <QTimer>
 #include <QVideoFrame>
 #include <QVideoSink>
+#include <QtConcurrent>
 
 Q_LOGGING_CATEGORY(logView, "browser.viewer", QtWarningMsg)
 
@@ -458,8 +458,8 @@ void PictureViewer::clear()
 void PictureViewer::setItem(const MediaItem &item)
 {
     m_loadingFuture.cancel();
-    m_loadingFuture = Utils::runAsync(imageForFilePath, item.filePath, item.metaData.orientation);
-    Utils::onResultReady(m_loadingFuture, this, [this](const QImage &image) {
+    m_loadingFuture = QtConcurrent::run(imageForFilePath, item.filePath, item.metaData.orientation);
+    m_loadingFuture.then(this, [this](const QImage &image) {
         auto item = new QGraphicsPixmapItem(QPixmap::fromImage(image));
         item->setTransformationMode(Qt::SmoothTransformation);
         clear();

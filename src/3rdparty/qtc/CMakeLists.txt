@@ -1,8 +1,6 @@
 add_library(thirdparty_qtc STATIC
     progressindicator.cpp
     progressindicator.h
-    runextensions.cpp
-    runextensions.h
     utils.qrc
 )
 
