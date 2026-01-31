@@ -194,10 +194,28 @@ static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &typ
     }
     return false;
 }
+using OptionalRegExList = QList<QRegularExpression>;
+static OptionalRegExList filterRegexFromString(const QString &filterString)
+{
+    static const QRegularExpression whiteSpace("\\s+");
+    const auto strings = filterString.split(whiteSpace);
+    QList<QRegularExpression> result;
+    std::transform(strings.cbegin(),
+                   strings.cend(),
+                   std::back_inserter(result),
+                   [](const QString &s) {
+                       QRegularExpression regex(s,
+                                                QRegularExpression::CaseInsensitiveOption
+                                                    | QRegularExpression::MultilineOption);
+                       regex.optimize();
+                       return regex;
+                   });
+    return result;
+}
 
 static MediaItems collectItems(QPromise<MediaDirectoryModel::ResultList> &fi,
                                const QString &path,
-                               const QString &filterString,
+                               const OptionalRegExList &regexes,
                                bool videosOnly)
 {
     // scraped from https://cgit.freedesktop.org/xdg/shared-mime-info/plain/freedesktop.org.xml.in
@@ -235,32 +253,9 @@ static MediaItems collectItems(QPromise<MediaDirectoryModel::ResultList> &fi,
     const QDir dir(path);
     const auto entryList = dir.entryInfoList(QDir::Files);
     QList<std::optional<MediaItem>> optItems = QtConcurrent::blockingMapped(
-        sThreadPool,
-        entryList,
-        [filterString, videosOnly, &mdb, &fi, supported](
-            const QFileInfo &entry) -> std::optional<MediaItem> {
-            const auto regexesFromString = [](const QString &s) {
-                static const QRegularExpression whiteSpace("\\s+");
-                const auto strings = s.split(whiteSpace);
-                QList<QRegularExpression> result;
-                std::transform(strings.cbegin(),
-                               strings.cend(),
-                               std::back_inserter(result),
-                               [](const QString &s) {
-                                   return QRegularExpression(
-                                       s,
-                                       QRegularExpression::CaseInsensitiveOption
-                                           | QRegularExpression::MultilineOption);
-                               });
-                return result;
-            };
-            const std::optional<QList<QRegularExpression>> regexes
-                = filterString.isEmpty() ? std::nullopt
-                                         : std::make_optional(regexesFromString(filterString));
-            const auto passesFilter = [regexes](const QList<QString> &entries) {
-                if (!regexes)
-                    return true;
-                return std::all_of(regexes->cbegin(), regexes->cend(), [entries](const auto &rx) {
+        sThreadPool, entryList, [&](const QFileInfo &entry) -> std::optional<MediaItem> {
+            const auto passesFilter = [&](const QList<QString> &entries) {
+                return std::all_of(regexes.cbegin(), regexes.cend(), [entries](const auto &rx) {
                     return std::any_of(entries.cbegin(), entries.cend(), [rx](const QString &entry) {
                         return rx.match(entry).hasMatch();
                     });
@@ -321,7 +316,8 @@ void MediaDirectoryModel::load()
     m_futureWatcher.setFuture(QtConcurrent::run(
         [this, sortKey, path, filterString, videosOnly, recursive](QPromise<ResultList> &fi) {
             m_sLoadingStarted.send({});
-            MediaItems results = collectItems(fi, path, filterString, videosOnly);
+            const OptionalRegExList filterRegex = filterRegexFromString(filterString);
+            MediaItems results = collectItems(fi, path, filterRegex, videosOnly);
             if (fi.isCanceled())
                 return;
             arrange(results, sortKey);
@@ -335,7 +331,7 @@ void MediaDirectoryModel::load()
                     if (fi.isCanceled())
                         break;
                     const QString dir = it.next();
-                    MediaItems dirResults = collectItems(fi, dir, filterString, videosOnly);
+                    MediaItems dirResults = collectItems(fi, dir, filterRegex, videosOnly);
                     arrange(dirResults, sortKey);
                     const ResultList resultList = addArranged(sortKey, results, dirResults);
                     if (!fi.isCanceled() && !resultList.empty())
