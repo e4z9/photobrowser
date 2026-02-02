@@ -48,7 +48,7 @@ void shuffle(C &&c)
     std::shuffle(c.begin(), c.end(), g);
 }
 
-void arrange(MediaItems &items, MediaDirectoryModel::SortKey key)
+void sortByKey(const MediaDirectoryModel::SortKey key, MediaItems &items)
 {
     if (key == MediaDirectoryModel::SortKey::Random)
         shuffle(items);
@@ -58,8 +58,11 @@ void arrange(MediaItems &items, MediaDirectoryModel::SortKey key)
 
 MediaDirectoryModel::ResultList addSorted(MediaDirectoryModel::SortKey key,
                                           MediaItems &target,
-                                          const MediaItems &source)
+                                          MediaItems source)
 {
+    sortByKey(key, source);
+    // TODO make more performant by not inserting, but inserting into a new container,
+    // like std::merge
     MediaDirectoryModel::ResultList resultList;
     target.reserve(target.size() + source.size());
     auto current = source.begin();
@@ -81,13 +84,15 @@ MediaDirectoryModel::ResultList addSorted(MediaDirectoryModel::SortKey key,
     return resultList;
 }
 
-MediaDirectoryModel::ResultList addArranged(MediaDirectoryModel::SortKey key,
-                                            MediaItems &target,
-                                            const MediaItems &source)
+MediaDirectoryModel::ResultList mergeResults(MediaDirectoryModel::SortKey key,
+                                             MediaItems &target,
+                                             const MediaItems &source)
 {
     if (key != MediaDirectoryModel::SortKey::Random)
         return addSorted(key, target, source);
     // random
+    // TODO make more performant by not inserting, but first creating the indicees, then inserting
+    // piece by piece from current & add lists into the result list.
     MediaDirectoryModel::ResultList resultList;
     target.reserve(target.size() + source.size());
     std::random_device rd;
@@ -131,6 +136,7 @@ MediaDirectoryModel::MediaDirectoryModel()
                 }
             });
     connect(&m_futureWatcher, &QFutureWatcherBase::resultReadyAt, this, [this](int index) {
+        // TODO using futureWatcher results is inefficient because it keeps the intermediate states
         for (const auto &value : m_futureWatcher.resultAt(index))
             insertItems(value.first, value.second);
     });
@@ -194,6 +200,7 @@ static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &typ
     }
     return false;
 }
+
 using OptionalRegExList = QList<QRegularExpression>;
 static OptionalRegExList filterRegexFromString(const QString &filterString)
 {
@@ -213,8 +220,37 @@ static OptionalRegExList filterRegexFromString(const QString &filterString)
     return result;
 }
 
-static MediaItems collectItems(QPromise<MediaDirectoryModel::ResultList> &fi,
-                               const QString &path,
+static void iterateDirectory(QPromise<QFileInfoList> &promise,
+                             QPromise<MediaDirectoryModel::TopLevelResultType> &topLevelPromise,
+                             const QString &path,
+                             const bool recursive)
+{
+    static const qsizetype batchSize = 200;
+    QFileInfoList infos;
+    infos.reserve(batchSize);
+    const QDirListing::IteratorFlags flags = recursive
+                                                 ? QDirListing::IteratorFlag::FilesOnly
+                                                       | QDirListing::IteratorFlag::Recursive
+                                                       | QDirListing::IteratorFlag::FollowDirSymlinks
+                                                 : QDirListing::IteratorFlag::FilesOnly;
+    for (const QDirListing::DirEntry &entry : QDirListing(path, flags)) {
+        infos << entry.fileInfo();
+        if (infos.size() >= batchSize) {
+            if (topLevelPromise.isCanceled())
+                return;
+            // TODO should this be throttled by availability of threads in sThreadPool
+            promise.addResult(infos);
+            infos.clear();
+        }
+    }
+    if (topLevelPromise.isCanceled())
+        return;
+    if (!infos.empty())
+        promise.addResult(infos);
+}
+
+static MediaItems collectItems(QPromise<MediaDirectoryModel::TopLevelResultType> &topLevelPromise,
+                               const QFileInfoList &paths,
                                const OptionalRegExList &regexes,
                                bool videosOnly)
 {
@@ -248,58 +284,65 @@ static MediaItems collectItems(QPromise<MediaDirectoryModel::ResultList> &fi,
                                                "video/x-msvideo",
                                                "video/x-nsv",
                                                "video/x-sgi-movie"};
-    const QList<QByteArray> supported = QImageReader::supportedMimeTypes();
+    const QList<QByteArray> supportedImages = QImageReader::supportedMimeTypes();
     const QMimeDatabase mdb;
-    const QDir dir(path);
-    const auto entryList = dir.entryInfoList(QDir::Files);
-    QList<std::optional<MediaItem>> optItems = QtConcurrent::blockingMapped(
-        sThreadPool, entryList, [&](const QFileInfo &entry) -> std::optional<MediaItem> {
-            const auto passesFilter = [&](const QList<QString> &entries) {
-                return std::all_of(regexes.cbegin(), regexes.cend(), [entries](const auto &rx) {
-                    return std::any_of(entries.cbegin(), entries.cend(), [rx](const QString &entry) {
-                        return rx.match(entry).hasMatch();
-                    });
-                });
-            };
-            if (fi.isCanceled())
-                return {};
-            const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
-            const auto mimeType = mdb.mimeTypeForFile(resolvedFilePath);
-            if (mimeType.name() == "inode/directory")
-                return {};
-            MediaType type;
-            if (containsMimeType(supported, mimeType)) {
-                if (videosOnly)
-                    return {};
-                type = MediaType::Image;
-            } else if (containsMimeType(videoMimeTypes, mimeType)) {
-                type = MediaType::Video;
-            } else {
-                return {};
-            }
-            QFileInfo fi(resolvedFilePath);
-            const auto metaData = Util::metaData(resolvedFilePath);
-            if (!passesFilter(metaData.tags + QList{entry.completeBaseName()}))
-                return {};
-            return std::make_optional<MediaItem>({entry.fileName(),
-                                                  entry.filePath(),
-                                                  resolvedFilePath,
-                                                  fi.birthTime(),
-                                                  fi.lastModified(),
-                                                  std::nullopt,
-                                                  metaData,
-                                                  type});
+    const auto passesFilter = [&](const QList<QString> &entries) {
+        return std::all_of(regexes.cbegin(), regexes.cend(), [entries](const auto &rx) {
+            return std::any_of(entries.cbegin(), entries.cend(), [rx](const QString &entry) {
+                return rx.match(entry).hasMatch();
+            });
         });
+    };
+    MediaItems result;
+    for (const QFileInfo &entry : paths) {
+        if (topLevelPromise.isCanceled())
+            return {};
+        const QString resolvedFilePath = Util::resolveSymlinks(entry.filePath());
+        const auto mimeType = mdb.mimeTypeForFile(resolvedFilePath);
+        if (mimeType.name() == "inode/directory")
+            continue;
+        MediaType type;
+        if (containsMimeType(supportedImages, mimeType)) {
+            if (videosOnly)
+                continue;
+            type = MediaType::Image;
+        } else if (containsMimeType(videoMimeTypes, mimeType)) {
+            type = MediaType::Video;
+        } else {
+            continue;
+        }
+        QFileInfo fi(resolvedFilePath);
+        const auto metaData = Util::metaData(resolvedFilePath);
+        if (!passesFilter(metaData.tags + QList{entry.completeBaseName()}))
+            continue;
+        result.push_back(MediaItem({entry.fileName(),
+                                    entry.filePath(),
+                                    resolvedFilePath,
+                                    fi.birthTime(),
+                                    fi.lastModified(),
+                                    std::nullopt,
+                                    metaData,
+                                    type}));
+    }
+    return result;
+}
 
-    optItems.erase(std::remove_if(optItems.begin(),
-                                  optItems.end(),
-                                  [](const std::optional<MediaItem> &i) { return !i; }),
-                   optItems.end());
-    MediaItems items;
-    std::transform(optItems.cbegin(), optItems.cend(), std::back_inserter(items), [](const auto &i) {
-        return *i;
+template<typename T>
+static void futureCont(const QFuture<T> &future,
+                       QObject *guard,
+                       const std::function<void(T)> &handleResult,
+                       const std::function<void()> &handleFinished)
+{
+    auto watcher = new QFutureWatcher<T>;
+    QObject::connect(watcher,
+                     &QFutureWatcherBase::resultReadyAt,
+                     guard,
+                     [handleResult, future](int index) { handleResult(future.resultAt(index)); });
+    QObject::connect(watcher, &QFutureWatcherBase::finished, guard, [watcher, handleFinished] {
+        handleFinished();
+        watcher->deleteLater();
     });
-    return items;
+    watcher->setFuture(future);
 }
 
 void MediaDirectoryModel::load()
@@ -313,31 +356,74 @@ void MediaDirectoryModel::load()
     beginResetModel();
     m_items.clear();
     endResetModel();
-    m_futureWatcher.setFuture(QtConcurrent::run(
-        [this, sortKey, path, filterString, videosOnly, recursive](QPromise<ResultList> &fi) {
+
+    /*
+     * - iterate through directory (recursively or not) and collect file paths to batch size
+     * - # worker threads that check the batch size for media & collect meta data
+     * - sort results into the global result list and report back only a few times per second to
+     *   limit model updates
+     */
+    m_futureWatcher.setFuture(
+        QtConcurrent::run([this, sortKey, path, filterString, videosOnly, recursive](
+                              QPromise<TopLevelResultType> &topLevelPromise) {
             m_sLoadingStarted.send({});
             const OptionalRegExList filterRegex = filterRegexFromString(filterString);
-            MediaItems results = collectItems(fi, path, filterRegex, videosOnly);
-            if (fi.isCanceled())
-                return;
-            arrange(results, sortKey);
-            if (!results.empty())
-                fi.addResult({{0, results}});
-            if (recursive) {
-                QDirIterator it(path,
-                                QDir::Dirs | QDir::NoDotAndDotDot,
-                                QDirIterator::Subdirectories | QDirIterator::FollowSymlinks);
-                while (it.hasNext()) {
-                    if (fi.isCanceled())
-                        break;
-                    const QString dir = it.next();
-                    MediaItems dirResults = collectItems(fi, dir, filterRegex, videosOnly);
-                    arrange(dirResults, sortKey);
-                    const ResultList resultList = addArranged(sortKey, results, dirResults);
-                    if (!fi.isCanceled() && !resultList.empty())
-                        fi.addResult(resultList);
-                }
-            }
+            MediaItems results;
+            MediaItems queue;
+            const auto reportResults = [&] {
+                if (queue.empty())
+                    return;
+                const auto reportList = mergeResults(sortKey, results, queue);
+                // results = mergeResults(sortKey, results, queue);
+                queue.clear();
+                topLevelPromise.addResult(/*results*/ reportList);
+            };
+            QTimer reportTimer;
+            reportTimer.setSingleShot(false);
+            reportTimer.setInterval(200);
+            reportTimer.callOnTimeout([reportResults] { reportResults(); });
+            QEventLoop loop;
+            int runningThreads = 0;
+            const auto threadFinished = [&] {
+                --runningThreads;
+                if (runningThreads < 0)
+                    qWarning() << "!!! INTERNAL ERROR runningThreads =" << runningThreads;
+                if (runningThreads <= 0)
+                    loop.exit();
+            };
+            reportTimer.start();
+            ++runningThreads;
+            QFuture<QFileInfoList> iterateFuture = QtConcurrent::run(
+                [path, &topLevelPromise, recursive](QPromise<QFileInfoList> &promise) {
+                    iterateDirectory(promise, topLevelPromise, path, recursive);
+                });
+            futureCont<QFileInfoList>(
+                iterateFuture,
+                &loop,
+                [&](const QFileInfoList &infos) {
+                    if (topLevelPromise.isCanceled())
+                        return;
+                    ++runningThreads;
+                    QFuture<MediaItems> collectFuture = QtConcurrent::run(
+                        &*sThreadPool, [&topLevelPromise, infos, filterRegex, videosOnly] {
+                            const MediaItems items = collectItems(topLevelPromise,
+                                                                  infos,
+                                                                  filterRegex,
+                                                                  videosOnly);
+                            return items;
+                        });
+                    futureCont<MediaItems>(
+                        collectFuture,
+                        &loop,
+                        [&](const MediaItems &items) {
+                            if (!items.empty() && !topLevelPromise.isCanceled())
+                                queue.insert(queue.cend(), items.cbegin(), items.cend());
+                        },
+                        threadFinished);
+                },
+                threadFinished);
+            loop.exec();
+            reportResults();
             m_sLoadingFinished.send({});
         }));
 }
@@ -374,10 +460,7 @@ void MediaDirectoryModel::setSortKeyInternal(SortKey key)
         return;
     }
     beginResetModel();
-    if (key == SortKey::Random)
-        shuffle(m_items);
-    else
-        std::sort(m_items.begin(), m_items.end(), itemLessThan(key));
+    sortByKey(key, m_items);
     endResetModel();
 }
 

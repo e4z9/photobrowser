@@ -73,6 +73,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
 
     using ResultList = std::vector<std::pair<MediaItems::size_type, MediaItems>>;
+    using TopLevelResultType = MediaDirectoryModel::ResultList;
 
 private:
     void load();
@@ -82,7 +83,7 @@ private:
     void setupDateDisplay();
 
     MediaItems m_items;
-    QFutureWatcher<ResultList> m_futureWatcher;
+    QFutureWatcher<TopLevelResultType> m_futureWatcher;
     mutable ThumbnailCreator m_thumbnailCreator;
     sodium::cell<QString> m_path;
     sodium::cell<bool> m_isRecursive;
