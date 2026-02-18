@@ -264,6 +264,8 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
 
 class FileTreeView : public SQWidgetBase<QWidget>
 {
+    Q_DECLARE_TR_FUNCTIONS(FileTreeView)
+
 public:
     FileTreeView(Settings &settings, QWidget *parent = nullptr);
 

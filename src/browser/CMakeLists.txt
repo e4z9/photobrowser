@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Multimedia LinguistTools)
 
 add_executable(photobrowser WIN32 MACOSX_BUNDLE
     app.cpp
@@ -31,6 +31,13 @@ set_target_properties(photobrowser PROPERTIES
 
 target_link_libraries(photobrowser PRIVATE sodium-qt thirdparty_qtc util
   Qt::Multimedia Qt::Concurrent)
+
+qt_standard_project_setup(I18N_TRANSLATED_LANGUAGES de)
+qt_add_translations(photobrowser
+    NO_GENERATE_PLURALS_TS_FILE
+    TS_FILE_BASE photobrowser
+    TS_OUTPUT_DIRECTORY translations
+)
 
 install(TARGETS photobrowser
     BUNDLE
