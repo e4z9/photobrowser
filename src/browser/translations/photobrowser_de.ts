@@ -193,7 +193,7 @@
     <message>
         <location filename="../mediadirectorymodel.cpp" line="535"/>
         <source>Tags:</source>
-        <translation>Etiketten:</translation>
+        <translation>Tags:</translation>
     </message>
     <message>
         <location filename="../mediadirectorymodel.cpp" line="610"/>
