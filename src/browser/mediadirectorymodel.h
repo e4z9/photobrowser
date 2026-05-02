@@ -65,6 +65,8 @@ public:
 
     void moveItemAtIndexToTrash(int index);
 
+    const sodium::cell<QSet<QString>> &tags() const;
+
 public:
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex &child) const override;
@@ -83,6 +85,7 @@ private:
     void setupDateDisplay();
 
     MediaItems m_items;
+    QStringList m_tags; // including duplicates so we can keep count when removing
     QFutureWatcher<TopLevelResultType> m_futureWatcher;
     mutable ThumbnailCreator m_thumbnailCreator;
     sodium::cell<QString> m_path;
@@ -91,6 +94,8 @@ private:
     sodium::cell<bool> m_videosOnly;
     sodium::cell<SortKey> m_sortKey;
     sodium::cell<bool> m_showDateDisplay;
+    sodium::stream_sink<QStringList> m_sTags;
+    sodium::cell<QSet<QString>> m_uniqueTags;
     sodium::stream_sink<sodium::unit> m_sLoadingStarted;
     sodium::stream_sink<sodium::unit> m_sLoadingFinished;
     Unsubscribe m_unsubscribe;

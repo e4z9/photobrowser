@@ -16,6 +16,8 @@ add_executable(photobrowser WIN32 MACOSX_BUNDLE
     main.cpp
     mediadirectorymodel.cpp
     mediadirectorymodel.h
+    tagsview.cpp
+    tagsview.h
     thumbnailcreator.cpp
     thumbnailcreator.h
 )

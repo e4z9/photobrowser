@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mediadirectorymodel.h"
+#include "tagsview.h"
 
 #include <sqaction.h>
 #include <sqtimer.h>
@@ -75,6 +76,7 @@ private:
     FullscreenSplitter *m_splitter = nullptr;
     std::unique_ptr<SQTimer> m_progressTimer;
     std::unique_ptr<MediaDirectoryModel> m_model;
+    std::unique_ptr<TagsManager> m_tagsManager;
     Unsubscribe m_unsubscribe;
 };
 

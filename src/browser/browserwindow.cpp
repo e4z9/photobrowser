@@ -3,6 +3,8 @@
 #include "directorytree.h"
 #include "filmrollview.h"
 #include "fullscreensplitter.h"
+#include "tagsview.h"
+
 #include "sqaction.h"
 #include "sqcheckbox.h"
 #include "sqlineedit.h"
@@ -16,6 +18,7 @@
 #include <QEvent>
 #include <QLabel>
 #include <QMenuBar>
+#include <QSplitter>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWindowStateChangeEvent>
@@ -31,6 +34,7 @@ const char kRootPath[] = "RootPath";
 const char kCurrentPath[] = "CurrentPath";
 const char kIncludeSubFolders[] = "IncludeSubFolders";
 const char kVideosOnly[] = "VideosOnly";
+const char kTags[] = "Tags";
 
 Settings::Setting::Setting(const QByteArray &key, const cell<QVariant> &value)
     : key(key)
@@ -380,7 +384,23 @@ BrowserWindow::BrowserWindow(QWidget *parent)
                                       sScale);
     imageView->setModel(m_model.get());
 
-    m_splitter->setWidget(FullscreenSplitter::First, tree);
+    sodium::cell_loop<Tags> tags;
+    const sodium::stream<Tags> sTagSettings = m_settings.add(kTags, tags);
+    const sodium::stream<Tags> sModelTags
+        = m_model->tags().map([](const QSet<QString> &s) { return Tags::fromSet(s); }).updates();
+    m_tagsManager = std::make_unique<TagsManager>(sTagSettings.or_else(sModelTags),
+                                                  imageView->currentItem().map(
+                                                      [](const OptionalMediaItem &i) {
+                                                          return i ? i->metaData.tags
+                                                                   : QStringList();
+                                                      }));
+    tags.loop(m_tagsManager->tags());
+    auto leftView = new QSplitter;
+    leftView->setOrientation(Qt::Vertical);
+    leftView->addWidget(tree);
+    leftView->addWidget(m_tagsManager->view());
+
+    m_splitter->setWidget(FullscreenSplitter::First, leftView);
     m_splitter->setWidget(FullscreenSplitter::Second, imageView);
     m_splitter->setFullscreenIndex(FullscreenSplitter::Second);
 

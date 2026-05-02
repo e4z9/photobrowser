@@ -117,7 +117,13 @@ MediaDirectoryModel::MediaDirectoryModel()
     , m_videosOnly(false)
     , m_sortKey(SortKey::ExifCreation)
     , m_showDateDisplay(true)
+    , m_uniqueTags(QSet<QString>())
 {
+    m_uniqueTags = m_sTags
+                       .map([](const QStringList &tags) {
+                           return QSet<QString>{tags.constBegin(), tags.constEnd()};
+                       })
+                       .hold(QSet<QString>());
     connect(&m_thumbnailCreator,
             &ThumbnailCreator::thumbnailReady,
             this,
@@ -357,6 +363,9 @@ void MediaDirectoryModel::load()
     m_items.clear();
     endResetModel();
 
+    m_tags.clear();
+    m_sTags.send({});
+
     /*
      * - iterate through directory (recursively or not) and collect file paths to batch size
      * - # worker threads that check the batch size for media & collect meta data
@@ -436,9 +445,21 @@ void MediaDirectoryModel::moveItemAtIndexToTrash(int i)
     const QModelIndex mIndex = index(i, 0);
     beginRemoveRows(mIndex.parent(), mIndex.row(), mIndex.row());
     const MediaItem &item = m_items.at(mIndex.row());
+    const QStringList tagsToRemove = item.metaData.tags;
     Util::moveToTrash({item.filePath});
     m_items.erase(std::begin(m_items) + mIndex.row());
     endRemoveRows();
+
+    if (!tagsToRemove.isEmpty()) {
+        for (const QString &tag : tagsToRemove)
+            m_tags.removeOne(tag);
+        m_sTags.send(m_tags);
+    }
+}
+
+const sodium::cell<QSet<QString>> &MediaDirectoryModel::tags() const
+{
+    return m_uniqueTags;
 }
 
 const sodium::stream<unit> &MediaDirectoryModel::sLoadingStarted() const
@@ -588,6 +609,12 @@ void MediaDirectoryModel::insertItems(int index, const MediaItems &items)
         m_items.insert(std::begin(m_items) + index, std::begin(items), std::end(items));
         endInsertRows();
     }
+
+    const int tagsSize = m_tags.size();
+    for (const MediaItem &item : items)
+        m_tags += item.metaData.tags;
+    if (m_tags.size() != tagsSize)
+        m_sTags.send(m_tags);
 }
 
 void MediaDirectoryModel::cancelAndWait()
