@@ -1,5 +1,9 @@
 #pragma once
 
+#include <sqtools.h>
+
+#include <QAction>
+#include <QHash>
 #include <QKeySequence>
 #include <QWidget>
 
@@ -12,6 +16,8 @@ struct Tag
     QString name;
     QKeySequence shortcut;
 };
+
+Q_DECLARE_METATYPE(Tag)
 
 class Tags : public QList<Tag>
 {
@@ -37,9 +43,15 @@ public:
 
     const sodium::cell<Tags> &tags() const;
 
+    const sodium::stream<QString> &sToggleTag() const;
+
     QWidget *view();
 
 private:
+    Unsubscribe m_unsubscribe;
+    QHash<QString, QAction *> m_actions;
+
     sodium::cell<Tags> m_tags;
+    sodium::stream_sink<QString> m_sToggleTag;
     std::unique_ptr<TagsView> m_view;
 };

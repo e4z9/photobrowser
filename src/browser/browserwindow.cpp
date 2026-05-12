@@ -388,12 +388,17 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     const sodium::stream<Tags> sTagSettings = m_settings.add(kTags, tags);
     const sodium::stream<Tags> sModelTags
         = m_model->tags().map([](const QSet<QString> &s) { return Tags::fromSet(s); }).updates();
-    m_tagsManager = std::make_unique<TagsManager>(sTagSettings.or_else(sModelTags),
-                                                  imageView->currentItem().map(
-                                                      [](const OptionalMediaItem &i) {
-                                                          return i ? i->metaData.tags
-                                                                   : QStringList();
-                                                      }));
+    const sodium::cell<QStringList> selectedTags = imageView->currentItem().map(
+        [](const OptionalMediaItem &i) { return i ? i->metaData.tags : QStringList(); });
+    m_tagsManager = std::make_unique<TagsManager>(sTagSettings.or_else(sModelTags), selectedTags);
+    const sodium::stream<std::pair<OptionalMediaItem, QString>> sToggleTag
+        = m_tagsManager->sToggleTag().snapshot(imageView->currentItem(),
+                                               [](const QString &tag,
+                                                  const OptionalMediaItem &item) {
+                                                   return std::make_pair(item, tag);
+                                               });
+    m_model->setToggleTag(sToggleTag);
+
     tags.loop(m_tagsManager->tags());
     auto leftView = new QSplitter;
     leftView->setOrientation(Qt::Vertical);

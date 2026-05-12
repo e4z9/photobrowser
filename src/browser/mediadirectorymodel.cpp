@@ -1,6 +1,7 @@
 #include "mediadirectorymodel.h"
 
 #include <util/fileutil.h>
+#include <util/tags.h>
 
 #include <QDir>
 #include <QDirIterator>
@@ -195,6 +196,38 @@ void MediaDirectoryModel::setVideosOnly(const sodium::cell<bool> &videosOnly)
     m_unsubscribe.insert_or_assign("videosOnly", m_videosOnly.listen(post<bool>(this, [this](bool) {
         load(); /*trigger reload*/
     })));
+}
+
+void MediaDirectoryModel::setToggleTag(
+    const sodium::stream<std::pair<OptionalMediaItem, QString>> &sToggleTag)
+{
+    m_unsubscribe.insert_or_assign("toggletag",
+                                   sToggleTag.listen(post<std::pair<OptionalMediaItem, QString>>(
+                                       this,
+                                       [this](const std::pair<OptionalMediaItem, QString> &toTag) {
+                                           if (toTag.first) {
+                                               QStringList tags = toTag.first->metaData.tags;
+                                               if (tags.contains(toTag.second))
+                                                   tags.removeAll(toTag.second);
+                                               else
+                                                   tags.append(toTag.second);
+                                               Util::setTags(toTag.first->filePath, tags);
+                                               auto it = std::find_if(m_items.begin(),
+                                                                      m_items.end(),
+                                                                      [toTag](
+                                                                          const MediaItem &item) {
+                                                                          return item.filePath
+                                                                                 == toTag.first
+                                                                                        ->filePath;
+                                                                      });
+                                               if (it != m_items.end()) {
+                                                   it->metaData.tags = tags;
+                                                   const int i = std::distance(m_items.begin(), it);
+                                                   const QModelIndex idx = index(i, 0);
+                                                   dataChanged(idx, idx);
+                                               }
+                                           }
+                                       })));
 }
 
 static bool containsMimeType(const QList<QByteArray> &list, const QMimeType &type)

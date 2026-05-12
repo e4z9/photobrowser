@@ -58,6 +58,8 @@ public:
     void setFilterString(const sodium::cell<QString> &filterString);
     void setVideosOnly(const sodium::cell<bool> &videosOnly);
 
+    void setToggleTag(const sodium::stream<std::pair<OptionalMediaItem, QString>> &sToggleTag);
+
     const sodium::stream<sodium::unit> &sLoadingStarted() const;
     const sodium::stream<sodium::unit> &sLoadingFinished() const;
 
