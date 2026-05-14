@@ -52,6 +52,7 @@ private:
     QHash<QString, QAction *> m_actions;
 
     sodium::cell<Tags> m_tags;
-    sodium::stream_sink<QString> m_sToggleTag;
+    sodium::stream_sink<QString> m_sToggleTagAction;
+    sodium::stream<QString> m_sToggleTag;
     std::unique_ptr<TagsView> m_view;
 };

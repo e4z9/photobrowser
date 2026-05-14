@@ -95,6 +95,7 @@ public:
     const sodium::stream<Tag> &sShortcutEdited() const { return m_sShortcutEdited; }
     const sodium::stream<QString> &sTagAdded() const { return m_sTagAdded; }
     const sodium::stream<sodium::unit> &sCleanTags() const { return m_sCleanTags; }
+    const sodium::stream<QString> &sTagToggled() const { return m_sTagToggled; }
 
 private:
     void showContextMenu(const QPoint &pos);
@@ -105,6 +106,7 @@ private:
     sodium::stream_sink<Tag> m_sShortcutEdited;
     sodium::stream_sink<QString> m_sTagAdded;
     sodium::stream_sink<sodium::unit> m_sCleanTags;
+    sodium::stream_sink<QString> m_sTagToggled;
 };
 
 TagsView::TagsView(const sodium::cell<Tags> &tags, const sodium::cell<QStringList> &highlightedTags)
@@ -127,6 +129,12 @@ TagsView::TagsView(const sodium::cell<Tags> &tags, const sodium::cell<QStringLis
 
     m_view->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_view, &QWidget::customContextMenuRequested, this, &TagsView::showContextMenu);
+    connect(m_view, &QAbstractItemView::doubleClicked, this, [this](const QModelIndex &idx) {
+        if (!idx.isValid())
+            return;
+        const auto tag = m_view->model()->data(idx, kTagRole).value<Tag>();
+        m_sTagToggled.send(tag.name);
+    });
 }
 
 void TagsView::showContextMenu(const QPoint &pos)
@@ -316,6 +324,7 @@ TagsManager::TagsManager(const sodium::stream<Tags> &sAddTags,
 
     sodium::cell_loop<Tags> tags;
     m_view = std::make_unique<TagsView>(tags, highlightedTags);
+    m_sToggleTag = m_view->sTagToggled().or_else(m_sToggleTagAction);
 
     const sodium::stream<Tags> sInputTags = sAddTags.snapshot(tags, &mergeTags);
     const sodium::stream<Tags> sEditedTags = m_view->sShortcutEdited()
@@ -369,7 +378,7 @@ TagsManager::TagsManager(const sodium::stream<Tags> &sAddTags,
                     QObject::connect(action,
                                      &QAction::triggered,
                                      m_view.get(),
-                                     [this, name = t.name] { m_sToggleTag.send(name); });
+                                     [this, name = t.name] { m_sToggleTagAction.send(name); });
                     updated.insert(t.name, action);
                 }
             }
