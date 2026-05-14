@@ -33,7 +33,8 @@ QDataStream &operator>>(QDataStream &s, Tags &tags)
     for (const QString &s : strs) {
         const QStringList pairs = s.split(',');
         if (pairs.size() == 2)
-            tags.append(Tag{pairs.at(0), QKeySequence::fromString(pairs.at(1))});
+            tags.append(Tag{QUrl::fromPercentEncoding(pairs.at(0).toUtf8()),
+                            QKeySequence::fromString(pairs.at(1))});
     }
     return s;
 }
