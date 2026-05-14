@@ -93,13 +93,18 @@ public:
     TagsView(const sodium::cell<Tags> &tags, const sodium::cell<QStringList> &highlightedTags);
 
     const sodium::stream<Tag> &sShortcutEdited() const { return m_sShortcutEdited; }
+    const sodium::stream<QString> &sTagAdded() const { return m_sTagAdded; }
+    const sodium::stream<sodium::unit> &sCleanTags() const { return m_sCleanTags; }
 
 private:
     void showContextMenu(const QPoint &pos);
     void showShortcutDialog(const Tag &tag);
+    void showAddTagDialog();
 
     QTreeView *m_view;
     sodium::stream_sink<Tag> m_sShortcutEdited;
+    sodium::stream_sink<QString> m_sTagAdded;
+    sodium::stream_sink<sodium::unit> m_sCleanTags;
 };
 
 TagsView::TagsView(const sodium::cell<Tags> &tags, const sodium::cell<QStringList> &highlightedTags)
@@ -127,18 +132,34 @@ TagsView::TagsView(const sodium::cell<Tags> &tags, const sodium::cell<QStringLis
 void TagsView::showContextMenu(const QPoint &pos)
 {
     const QModelIndex index = m_view->indexAt(pos);
-    if (!index.isValid())
-        return;
 
     auto menu = new QMenu(m_view);
     menu->setAttribute(Qt::WA_DeleteOnClose);
-    menu->addAction(tr("Change Shortcut"), this, [this, pos] {
+
+    if (index.isValid()) {
+        const QString name = m_view->model()->data(index, kTagRole).value<Tag>().name;
+        auto nameAction = menu->addAction(name);
+        nameAction->setEnabled(false);
+        menu->addSeparator();
+    }
+
+    auto changeAction = menu->addAction(tr("Change Shortcut"), this, [this, pos] {
         const QModelIndex index = m_view->indexAt(pos);
         if (!index.isValid())
             return;
         const auto tag = m_view->model()->data(index, kTagRole).value<Tag>();
         showShortcutDialog(tag);
     });
+    changeAction->setEnabled(index.isValid());
+
+    menu->addAction(tr("Add Tag"), this, [this] { showAddTagDialog(); });
+
+    auto cleanAction = menu->addAction(tr("Clean Unused Tags"), this, [this] {
+        m_sCleanTags.send({});
+    });
+    cleanAction->setToolTip(tr("Removes all tags from the list that are currently not set. That "
+                               "does not change the tags of the current item."));
+
     menu->move(m_view->viewport()->mapToGlobal(pos));
     menu->show();
 }
@@ -159,6 +180,22 @@ void TagsView::showShortcutDialog(const Tag &tag)
         Tag newTag = tag;
         newTag.shortcut = shortcut;
         m_sShortcutEdited.send(newTag);
+    });
+    inputDialog->show();
+}
+
+void TagsView::showAddTagDialog()
+{
+    auto inputDialog = new QInputDialog(this);
+    inputDialog->setAttribute(Qt::WA_DeleteOnClose);
+    inputDialog->setInputMode(QInputDialog::TextInput);
+    inputDialog->setLabelText(tr("Tag name:"));
+    inputDialog->setWindowTitle(tr("Add a Tag"));
+    connect(inputDialog, &QDialog::accepted, this, [this, inputDialog] {
+        const QString tagName = inputDialog->textValue().trimmed();
+        if (tagName.isEmpty())
+            return;
+        m_sTagAdded.send(tagName);
     });
     inputDialog->show();
 }
@@ -291,7 +328,27 @@ TagsManager::TagsManager(const sodium::stream<Tags> &sAddTags,
                                                      }
                                                      return tags;
                                                  });
-    m_tags = sInputTags.or_else(sEditedTags).hold(Tags());
+    const sodium::stream<Tags> sAddedTags
+        = m_view->sTagAdded().snapshot(tags, [](const QString &name, Tags tags) {
+              const auto it = std::find_if(tags.cbegin(), tags.cend(), [name](const Tag &t) {
+                  return t.name == name;
+              });
+              if (it == tags.cend())
+                  tags.append({name, {}});
+              return tags;
+          });
+    const sodium::stream<Tags> sCleanedTags
+        = m_view->sCleanTags()
+              .snapshot(highlightedTags)
+              .snapshot(tags, [](const QStringList &highlightedTags, Tags tags) {
+                  for (int i = tags.size() - 1; i >= 0; --i) {
+                      const Tag t = tags.at(i);
+                      if (!highlightedTags.contains(t.name))
+                          tags.removeAt(i);
+                  }
+                  return tags;
+              });
+    m_tags = sInputTags.or_else(sEditedTags).or_else(sAddedTags).or_else(sCleanedTags).hold(Tags());
     tags.loop(m_tags);
 
     m_unsubscribe.insert_or_assign(
