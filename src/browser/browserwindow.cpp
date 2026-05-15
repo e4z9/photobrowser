@@ -34,6 +34,7 @@ const char kRootPath[] = "RootPath";
 const char kCurrentPath[] = "CurrentPath";
 const char kIncludeSubFolders[] = "IncludeSubFolders";
 const char kVideosOnly[] = "VideosOnly";
+const char kAudioEnabled[] = "AudioEnabled";
 const char kTags[] = "Tags";
 
 Settings::Setting::Setting(const QByteArray &key, const cell<QVariant> &value)
@@ -217,9 +218,12 @@ struct VideoMenu
     QMenu *menu;
     stream<unit> sPlayStop;
     stream<qint64> sStep;
+    cell<bool> audioEnabled;
 };
 
-static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *parent)
+static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected,
+                                 const stream<bool> &sAudioEnabled,
+                                 QWidget *parent)
 {
     // video actions
     auto videoMenu = new QMenu(BrowserWindow::tr("Video"), parent);
@@ -255,15 +259,20 @@ static VideoMenu createVideoMenu(const cell<bool> &videoItemSelected, QWidget *p
     const stream<qint64> sSmallBackward = smallStepBackward->triggered().map(
         [](unit) { return qint64(-1000); });
 
+    auto audioDisabled = new SQAction(BrowserWindow::tr("Audio off"), videoMenu);
+    audioDisabled->setChecked(sAudioEnabled.map([](bool enabled) { return !enabled; }), false);
+
     videoMenu->addAction(playStop);
     videoMenu->addAction(stepForward);
     videoMenu->addAction(stepBackward);
     videoMenu->addAction(smallStepForward);
     videoMenu->addAction(smallStepBackward);
+    videoMenu->addAction(audioDisabled);
 
     return {videoMenu,
             playStop->triggered(),
-            sForward.or_else(sBackward).or_else(sSmallForward).or_else(sSmallBackward)};
+            sForward.or_else(sBackward).or_else(sSmallForward).or_else(sSmallBackward),
+            audioDisabled->isChecked().map([](bool disabled) { return !disabled; })};
 }
 
 class FileTreeView : public SQWidgetBase<QWidget>
@@ -377,11 +386,13 @@ BrowserWindow::BrowserWindow(QWidget *parent)
     stream_loop<unit> sTogglePlayVideo;
     stream_loop<qint64> sStepVideo;
     stream_loop<std::optional<qreal>> sScale;
+    cell_loop<bool> audioEnabled;
     auto imageView = new FilmRollView(sCurrentIndex,
                                       sTogglePlayVideo,
                                       sStepVideo,
                                       m_sFullscreen,
-                                      sScale);
+                                      sScale,
+                                      audioEnabled);
     imageView->setModel(m_model.get());
 
     sodium::cell_loop<Tags> tags;
@@ -495,12 +506,14 @@ BrowserWindow::BrowserWindow(QWidget *parent)
 
     viewMenu->addAction(toggleFullscreen);
 
+    stream<bool> sAudioEnabledSetting = m_settings.add(kAudioEnabled, audioEnabled);
     const cell<bool> videoItemSelected = imageView->currentItem().map(
         [](const OptionalMediaItem &i) { return i && i->type == MediaType::Video; });
-    const auto videoMenu = createVideoMenu(videoItemSelected, menubar);
+    const auto videoMenu = createVideoMenu(videoItemSelected, sAudioEnabledSetting, menubar);
     menubar->addMenu(videoMenu.menu);
     sTogglePlayVideo.loop(videoMenu.sPlayStop);
     sStepVideo.loop(videoMenu.sStep);
+    audioEnabled.loop(videoMenu.audioEnabled);
 
     window()->installEventFilter(this);
 }

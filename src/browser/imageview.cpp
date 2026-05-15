@@ -70,6 +70,8 @@ public:
     // seconds of position, in milliseconds
     const cell<std::optional<qint64>> &position() const;
 
+    void setAudioEnabled(const sodium::cell<bool> &enabled);
+
 private:
     void playForFrameGrabbing();
     void stopFromFrameGrabbing();
@@ -167,6 +169,14 @@ const cell<bool> &VideoPlayer::isPlaying() const
 const cell<std::optional<qint64>> &VideoPlayer::position() const
 {
     return m_position_sink;
+}
+
+void VideoPlayer::setAudioEnabled(const sodium::cell<bool> &enabled)
+{
+    m_unsubscribe.insert_or_assign("audioenabled",
+                                   enabled.listen(ensureSameThread<bool>(this, [this](bool enabled) {
+                                       m_audioOutput.setMuted(!enabled);
+                                   })));
 }
 
 void VideoPlayer::playForFrameGrabbing()
@@ -337,6 +347,8 @@ public:
                 const stream<bool> &sFullscreen,
                 const stream<std::optional<qreal>> &sScale);
 
+    void setAudioEnabled(const sodium::cell<bool> &enabled);
+
 private:
     Unsubscribe m_unsubscribe;
     VideoGraphicsItem *m_item = nullptr;
@@ -392,6 +404,11 @@ VideoViewer::VideoViewer(const cell<OptionalMediaItem> &video,
     layout->addWidget(new PlayIcon(m_player->isPlaying().map([](bool b) { return !b; })), 10);
     layout->addStretch();
     layout->addWidget(new TimeDisplay(m_player->position(), duration));
+}
+
+void VideoViewer::setAudioEnabled(const sodium::cell<bool> &enabled)
+{
+    m_player->setAudioEnabled(enabled);
 }
 
 class PictureViewer : public QGraphicsView
@@ -480,7 +497,8 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
                      const stream<unit> &sTogglePlayVideo,
                      const stream<qint64> &sStepVideo,
                      const stream<bool> &sFullscreen,
-                     const stream<std::optional<qreal>> &sScale)
+                     const stream<std::optional<qreal>> &sScale,
+                     const cell<bool> &audioEnabled)
     : m_item(item)
     , m_layout(new QStackedLayout)
 {
@@ -508,6 +526,7 @@ ImageView::ImageView(const cell<OptionalMediaItem> &item,
                                        sStepVideo.gate(hasVideo),
                                        sFullscreen,
                                        sScaleCombined.gate(hasVideo));
+    videoViewer->setAudioEnabled(audioEnabled);
 
     auto noViewer = new QWidget;
     m_layout->addWidget(pictureViewer);

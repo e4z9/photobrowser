@@ -42,7 +42,8 @@ FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
                            const stream<unit> &sTogglePlayVideo,
                            const stream<qint64> &sStepVideo,
                            const stream<bool> &sFullscreen,
-                           const stream<std::optional<qreal>> &sScale)
+                           const stream<std::optional<qreal>> &sScale,
+                           const sodium::cell<bool> &audioEnabled)
     : m_splitter(new FullscreenSplitter(sFullscreen))
     , m_fotoroll(new Fotoroll(sCurrentIndex))
 {
@@ -55,7 +56,12 @@ FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
     m_selectionUpdate->setInterval(80);
     m_selectionUpdate->setSingleShot(true);
 
-    m_imageView = new ImageView(currentItem, sTogglePlayVideo, sStepVideo, sFullscreen, sScale);
+    m_imageView = new ImageView(currentItem,
+                                sTogglePlayVideo,
+                                sStepVideo,
+                                sFullscreen,
+                                sScale,
+                                audioEnabled);
 
     m_splitter->setOrientation(Qt::Vertical);
     m_splitter->setWidget(FullscreenSplitter::First, m_imageView);

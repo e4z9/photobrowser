@@ -43,7 +43,8 @@ public:
                  const sodium::stream<sodium::unit> &sTogglePlayVideo,
                  const sodium::stream<qint64> &sStepVideo,
                  const sodium::stream<bool> &sFullscreen,
-                 const sodium::stream<std::optional<qreal>> &sScale);
+                 const sodium::stream<std::optional<qreal>> &sScale,
+                 const sodium::cell<bool> &audioEnabled);
 
     void setModel(MediaDirectoryModel *model);
     MediaDirectoryModel *model() const;
