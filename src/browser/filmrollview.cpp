@@ -47,16 +47,7 @@ FilmRollView::FilmRollView(const stream<boost::optional<int>> &sCurrentIndex,
     : m_splitter(new FullscreenSplitter(sFullscreen))
     , m_fotoroll(new Fotoroll(sCurrentIndex))
 {
-    // delay change of current item in imageview
-    const auto sStartSelectionTimer = m_fotoroll->currentItem().updates().map(
-        [](const auto &) { return unit(); });
-    m_selectionUpdate = std::make_unique<SQTimer>(sStartSelectionTimer);
-    const cell<OptionalMediaItem> currentItem
-        = m_selectionUpdate->timedOut().snapshot(m_fotoroll->currentItem()).hold(std::nullopt);
-    m_selectionUpdate->setInterval(80);
-    m_selectionUpdate->setSingleShot(true);
-
-    m_imageView = new ImageView(currentItem,
+    m_imageView = new ImageView(m_fotoroll->currentItem(),
                                 sTogglePlayVideo,
                                 sStepVideo,
                                 sFullscreen,
@@ -266,6 +257,7 @@ Fotoroll::Fotoroll(const stream<boost::optional<int>> &sCurrentIndex)
     
     m_currentItem = currentIndex().map([this](boost::optional<int> i) -> OptionalMediaItem {
         if (i) {
+            // TODO this actually breaks referential transparancy
             const auto value = model()->data(model()->index(*i, 0),
                                              int(MediaDirectoryModel::Role::Item));
             if (value.canConvert<MediaItem>())

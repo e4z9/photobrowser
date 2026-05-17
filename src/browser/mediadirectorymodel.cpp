@@ -138,7 +138,7 @@ MediaDirectoryModel::MediaDirectoryModel()
                         if (duration)
                             item.metaData.duration = duration;
                         const QModelIndex mi = index(i, 0, QModelIndex());
-                        emit dataChanged(mi, mi);
+                        emit dataChanged(mi, mi, {int(Role::Thumbnail)});
                     }
                 }
             });

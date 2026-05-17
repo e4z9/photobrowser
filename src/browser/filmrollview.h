@@ -57,5 +57,4 @@ private:
     FullscreenSplitter *m_splitter;
     Fotoroll *m_fotoroll;
     ImageView *m_imageView;
-    std::unique_ptr<SQTimer> m_selectionUpdate;
 };

@@ -440,14 +440,26 @@ PictureViewer::PictureViewer(const cell<OptionalMediaItem> &image,
     setRenderHint(QPainter::Antialiasing);
     setFocusPolicy(Qt::NoFocus);
 
-    m_unsubscribe.insert_or_assign(
-        "image",
-        image.listen(ensureSameThread<OptionalMediaItem>(this, [this](const OptionalMediaItem &i) {
-            if (i)
-                setItem(*i);
-            else
-                clear();
-        })));
+    // The view only cares about file path and orientation
+    const cell<OptionalMediaItem> calmedImage = calm(image,
+                                                     [](const OptionalMediaItem &l,
+                                                        const OptionalMediaItem &r) -> bool {
+                                                         if (!l && !r)
+                                                             return true;
+                                                         if (!l || !r)
+                                                             return false;
+                                                         return l->filePath == r->filePath
+                                                                && l->metaData.orientation
+                                                                       == r->metaData.orientation;
+                                                     });
+    m_unsubscribe.insert_or_assign("image",
+                                   calmedImage.listen(ensureSameThread<OptionalMediaItem>(
+                                       this, [this](const OptionalMediaItem &i) {
+                                           if (i)
+                                               setItem(*i);
+                                           else
+                                               clear();
+                                       })));
     m_unsubscribe
         .insert_or_assign("fullscreen",
                           sFullscreen
