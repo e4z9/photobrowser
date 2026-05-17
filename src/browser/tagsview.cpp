@@ -13,6 +13,7 @@ static const int kNameColumn = 0;
 static const int kShortcutColumn = 1;
 
 static const int kTagRole = Qt::UserRole + 1;
+static const int kIsHighlightedRole = Qt::UserRole + 2;
 
 QDataStream &operator<<(QDataStream &s, const Tags &tags)
 {
@@ -93,6 +94,7 @@ public:
     TagsView(const sodium::cell<Tags> &tags, const sodium::cell<QStringList> &highlightedTags);
 
     const sodium::stream<Tag> &sShortcutEdited() const { return m_sShortcutEdited; }
+    const sodium::stream<QString> &sTagRemoved() const { return m_sTagRemoved; }
     const sodium::stream<QString> &sTagAdded() const { return m_sTagAdded; }
     const sodium::stream<sodium::unit> &sCleanTags() const { return m_sCleanTags; }
     const sodium::stream<QString> &sTagToggled() const { return m_sTagToggled; }
@@ -104,6 +106,7 @@ private:
 
     QTreeView *m_view;
     sodium::stream_sink<Tag> m_sShortcutEdited;
+    sodium::stream_sink<QString> m_sTagRemoved;
     sodium::stream_sink<QString> m_sTagAdded;
     sodium::stream_sink<sodium::unit> m_sCleanTags;
     sodium::stream_sink<QString> m_sTagToggled;
@@ -144,8 +147,9 @@ void TagsView::showContextMenu(const QPoint &pos)
     auto menu = new QMenu(m_view);
     menu->setAttribute(Qt::WA_DeleteOnClose);
 
+    const QString name = index.isValid() ? m_view->model()->data(index, kTagRole).value<Tag>().name
+                                         : QString();
     if (index.isValid()) {
-        const QString name = m_view->model()->data(index, kTagRole).value<Tag>().name;
         auto nameAction = menu->addAction(name);
         nameAction->setEnabled(false);
         menu->addSeparator();
@@ -159,6 +163,12 @@ void TagsView::showContextMenu(const QPoint &pos)
         showShortcutDialog(tag);
     });
     changeAction->setEnabled(index.isValid());
+
+    auto removeAction = menu->addAction(tr("Remove Tag"), this, [this, name] {
+        m_sTagRemoved.send(name);
+    });
+    removeAction->setEnabled(index.isValid()
+                             && !m_view->model()->data(index, kIsHighlightedRole).toBool());
 
     menu->addAction(tr("Add Tag"), this, [this] { showAddTagDialog(); });
 
@@ -297,9 +307,10 @@ QVariant TagsModel::data(const QModelIndex &index, int role) const
         const QColor lighterDarkerBase = lighterDarker(base, 0.2f);
         return tag.isHighlighted ? lighterDarkerBase : base;
     }
-    if (role == kTagRole) {
+    if (role == kTagRole)
         return QVariant::fromValue(tag.tag);
-    }
+    if (role == kIsHighlightedRole)
+        return tag.isHighlighted;
     return {};
 }
 
@@ -337,6 +348,11 @@ TagsManager::TagsManager(const sodium::stream<Tags> &sAddTags,
                                                      }
                                                      return tags;
                                                  });
+    const sodium::stream<Tags> sRemovedTags
+        = m_view->sTagRemoved().snapshot(tags, [](const QString &name, Tags tags) {
+              tags.removeIf([name](const Tag &tag) { return tag.name == name; });
+              return tags;
+          });
     const sodium::stream<Tags> sAddedTags
         = m_view->sTagAdded().snapshot(tags, [](const QString &name, Tags tags) {
               const auto it = std::find_if(tags.cbegin(), tags.cend(), [name](const Tag &t) {
@@ -357,7 +373,11 @@ TagsManager::TagsManager(const sodium::stream<Tags> &sAddTags,
                   }
                   return tags;
               });
-    m_tags = sInputTags.or_else(sEditedTags).or_else(sAddedTags).or_else(sCleanedTags).hold(Tags());
+    m_tags = sInputTags.or_else(sEditedTags)
+                 .or_else(sRemovedTags)
+                 .or_else(sAddedTags)
+                 .or_else(sCleanedTags)
+                 .hold(Tags());
     tags.loop(m_tags);
 
     m_unsubscribe.insert_or_assign(
